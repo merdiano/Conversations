@@ -3546,6 +3546,7 @@ public class XmppConnectionService extends Service {
 		}
 		if (Config.MAGIC_CREATE_DOMAIN != null && !hosts.contains(Config.MAGIC_CREATE_DOMAIN)) {
 			hosts.add(Config.MAGIC_CREATE_DOMAIN);
+			//hosts.add(Config.DOMAIN_IP);
 		}
 		return hosts;
 	}

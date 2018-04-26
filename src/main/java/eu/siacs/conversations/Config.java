@@ -15,32 +15,33 @@ public final class Config {
 	private static final int ENCRYPTION_MASK = UNENCRYPTED | OPENPGP | OTR | OMEMO;
 
 	public static boolean supportUnencrypted() {
-		return (ENCRYPTION_MASK & UNENCRYPTED) != 0;
+		return (ENCRYPTION_MASK & UNENCRYPTED) != 0;//todo warning always true
 	}
 
 	public static boolean supportOpenPgp() {
-		return (ENCRYPTION_MASK & OPENPGP) != 0;
+		return (ENCRYPTION_MASK & OPENPGP) != 0;//todo warning always true
 	}
 
 	public static boolean supportOtr() {
-		return (ENCRYPTION_MASK & OTR) != 0;
+		return (ENCRYPTION_MASK & OTR) != 0; //todo warning always true
 	}
 
 	public static boolean supportOmemo() {
-		return (ENCRYPTION_MASK & OMEMO) != 0;
+		return (ENCRYPTION_MASK & OMEMO) != 0; //todo warning always true
 	}
 
 	public static boolean multipleEncryptionChoices() {
-		return (ENCRYPTION_MASK & (ENCRYPTION_MASK - 1)) != 0;
+		return (ENCRYPTION_MASK & (ENCRYPTION_MASK - 1)) != 0; //todo warning always true
 	}
 
 	public static final String LOGTAG = "conversations";
 
-	public static final String BUG_REPORTS = "bugs@conversations.im";
+	public static final String BUG_REPORTS = "bugs@192.168.1.11";//todo creat bugs account on servern
 
 
 	public static final String DOMAIN_LOCK = null; //only allow account creation for this domain
-	public static final String MAGIC_CREATE_DOMAIN = "conversations.im";
+	public static final String MAGIC_CREATE_DOMAIN = "192.168.1.11";//"conversations.im";
+//	public static final String DOMAIN_IP = "192.168.1.100";
 	public static final boolean DISALLOW_REGISTRATION_IN_UI = false; //hide the register checkbox
 
 	public static final boolean USE_RANDOM_RESOURCE_ON_EVERY_BIND = false;

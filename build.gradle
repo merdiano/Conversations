@@ -13,7 +13,9 @@ buildscript {
 apply plugin: 'com.android.application'
 
 repositories {
-    jcenter()
+    jcenter{
+        url "http://jcenter.bintray.com"
+    }
     mavenCentral()
     maven {
         url 'https://maven.google.com'
