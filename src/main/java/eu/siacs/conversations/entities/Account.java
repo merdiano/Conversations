@@ -7,24 +7,17 @@ import android.util.Pair;
 
 import eu.siacs.conversations.crypto.PgpDecryptionService;
 
-import net.java.otr4j.crypto.OtrCryptoEngineImpl;
-import net.java.otr4j.crypto.OtrCryptoException;
-
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.security.PublicKey;
-import java.security.interfaces.DSAPublicKey;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 import eu.siacs.conversations.R;
-import eu.siacs.conversations.crypto.OtrService;
 import eu.siacs.conversations.crypto.axolotl.AxolotlService;
 import eu.siacs.conversations.crypto.axolotl.XmppAxolotlSession;
 import eu.siacs.conversations.services.XmppConnectionService;
@@ -49,6 +42,7 @@ public class Account extends AbstractEntity {
 	public static final String PORT = "port";
 	public static final String STATUS = "status";
 	public static final String STATUS_MESSAGE = "status_message";
+	public static final String RESOURCE = "resource";
 
 	public static final String PINNED_MECHANISM_KEY = "pinned_mechanism";
 
@@ -236,17 +230,16 @@ public class Account extends AbstractEntity {
 	protected String rosterVersion;
 	protected State status = State.OFFLINE;
 	protected final JSONObject keys;
+	protected String resource;
 	protected String avatar;
 	protected String displayName = null;
 	protected String hostname = null;
 	protected int port = 5222;
 	protected boolean online = false;
-	private OtrService mOtrService = null;
 	private AxolotlService axolotlService = null;
 	private PgpDecryptionService pgpDecryptionService = null;
 	private XmppConnection xmppConnection = null;
 	private long mEndGracePeriod = 0L;
-	private String otrFingerprint;
 	private final Roster roster = new Roster(this);
 	private List<Bookmark> bookmarks = new CopyOnWriteArrayList<>();
 	private final Collection<Jid> blocklist = new CopyOnWriteArraySet<>();
@@ -264,9 +257,6 @@ public class Account extends AbstractEntity {
 					final Presence.Status status, String statusMessage) {
 		this.uuid = uuid;
 		this.jid = jid;
-		if (jid.isBareJid()) {
-			this.setResource("mobile");
-		}
 		this.password = password;
 		this.options = options;
 		this.rosterVersion = rosterVersion;
@@ -288,8 +278,10 @@ public class Account extends AbstractEntity {
 	public static Account fromCursor(final Cursor cursor) {
 		Jid jid = null;
 		try {
-			jid = Jid.fromParts(cursor.getString(cursor.getColumnIndex(USERNAME)),
-					cursor.getString(cursor.getColumnIndex(SERVER)), "mobile");
+			jid = Jid.fromParts(
+					cursor.getString(cursor.getColumnIndex(USERNAME)),
+					cursor.getString(cursor.getColumnIndex(SERVER)),
+					cursor.getString(cursor.getColumnIndex(RESOURCE)));
 		} catch (final InvalidJidException ignored) {
 		}
 		return new Account(cursor.getString(cursor.getColumnIndex(UUID)),
@@ -325,6 +317,7 @@ public class Account extends AbstractEntity {
 	}
 
 	public boolean setJid(final Jid next) {
+		final Jid previousFull = this.jid;
 		final Jid prev = this.jid != null ? this.jid.toBareJid() : null;
 		final boolean changed = prev == null || (next != null && !prev.equals(next.toBareJid()));
 		if (changed) {
@@ -336,7 +329,7 @@ public class Account extends AbstractEntity {
 			}
 		}
 		this.jid = next;
-		return changed;
+		return next != null && next.equals(previousFull);
 	}
 
 	public Jid getServer() {
@@ -491,6 +484,7 @@ public class Account extends AbstractEntity {
 		values.put(PORT, port);
 		values.put(STATUS, presenceStatus.toShowString());
 		values.put(STATUS_MESSAGE, presenceStatusMessage);
+		values.put(RESOURCE,jid.getResourcepart());
 		return values;
 	}
 
@@ -499,16 +493,11 @@ public class Account extends AbstractEntity {
 	}
 
 	public void initAccountServices(final XmppConnectionService context) {
-		this.mOtrService = new OtrService(context, this);
 		this.axolotlService = new AxolotlService(this, context);
 		this.pgpDecryptionService = new PgpDecryptionService(context);
 		if (xmppConnection != null) {
 			xmppConnection.addOnAdvancedStreamFeaturesAvailableListener(axolotlService);
 		}
-	}
-
-	public OtrService getOtrService() {
-		return this.mOtrService;
 	}
 
 	public PgpDecryptionService getPgpDecryptionService() {
@@ -521,26 +510,6 @@ public class Account extends AbstractEntity {
 
 	public void setXmppConnection(final XmppConnection connection) {
 		this.xmppConnection = connection;
-	}
-
-	public String getOtrFingerprint() {
-		if (this.otrFingerprint == null) {
-			try {
-				if (this.mOtrService == null) {
-					return null;
-				}
-				final PublicKey publicKey = this.mOtrService.getPublicKey();
-				if (publicKey == null || !(publicKey instanceof DSAPublicKey)) {
-					return null;
-				}
-				this.otrFingerprint = new OtrCryptoEngineImpl().getFingerprint(publicKey).toLowerCase(Locale.US);
-				return this.otrFingerprint;
-			} catch (final OtrCryptoException ignored) {
-				return null;
-			}
-		} else {
-			return this.otrFingerprint;
-		}
 	}
 
 	public String getRosterVersion() {
@@ -674,10 +643,6 @@ public class Account extends AbstractEntity {
 
 	private List<XmppUri.Fingerprint> getFingerprints() {
 		ArrayList<XmppUri.Fingerprint> fingerprints = new ArrayList<>();
-		final String otr = this.getOtrFingerprint();
-		if (otr != null) {
-			fingerprints.add(new XmppUri.Fingerprint(XmppUri.FingerprintType.OTR,otr));
-		}
 		if (axolotlService == null) {
 			return fingerprints;
 		}

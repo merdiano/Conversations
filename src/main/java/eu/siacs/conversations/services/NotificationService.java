@@ -46,7 +46,6 @@ import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.persistance.FileBackend;
 import eu.siacs.conversations.ui.ConversationActivity;
 import eu.siacs.conversations.ui.ManageAccountActivity;
-import eu.siacs.conversations.ui.SettingsActivity;
 import eu.siacs.conversations.ui.TimePreference;
 import eu.siacs.conversations.utils.GeoHelper;
 import eu.siacs.conversations.utils.UIHelper;
@@ -397,7 +396,7 @@ public class NotificationService {
 				RemoteInput remoteInput = new RemoteInput.Builder("text_reply").setLabel(UIHelper.getMessageHint(mXmppConnectionService, conversation)).build();
 				PendingIntent markAsReadPendingIntent = createReadPendingIntent(conversation);
 				NotificationCompat.Action markReadAction = new NotificationCompat.Action.Builder(
-						R.drawable.ic_send_text_offline,
+						R.drawable.ic_drafts_white_24dp,
 						mXmppConnectionService.getString(R.string.mark_as_read),
 						markAsReadPendingIntent).build();
 				String replyLabel = mXmppConnectionService.getString(R.string.reply);
@@ -618,7 +617,7 @@ public class NotificationService {
 	private PendingIntent createContentIntent(final String conversationUuid, final String downloadMessageUuid) {
 		final Intent viewConversationIntent = new Intent(mXmppConnectionService,ConversationActivity.class);
 		viewConversationIntent.setAction(ConversationActivity.ACTION_VIEW_CONVERSATION);
-		viewConversationIntent.putExtra(ConversationActivity.CONVERSATION, conversationUuid);
+		viewConversationIntent.putExtra(ConversationActivity.EXTRA_CONVERSATION, conversationUuid);
 		if (downloadMessageUuid != null) {
 			viewConversationIntent.putExtra(ConversationActivity.EXTRA_DOWNLOAD_UUID, downloadMessageUuid);
 			return PendingIntent.getActivity(mXmppConnectionService,

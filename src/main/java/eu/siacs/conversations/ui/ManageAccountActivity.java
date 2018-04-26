@@ -1,14 +1,12 @@
 package eu.siacs.conversations.ui;
 
-import android.app.ActionBar;
-import android.app.AlertDialog;
+import android.support.v7.app.AlertDialog;
 import android.content.ActivityNotFoundException;
-import android.content.DialogInterface;
-import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.os.Bundle;
 import android.security.KeyChain;
 import android.security.KeyChainAliasCallback;
+import android.support.v7.app.ActionBar;
 import android.util.Pair;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
@@ -62,7 +60,7 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 			accountList.clear();
 			accountList.addAll(xmppConnectionService.getAccounts());
 		}
-		ActionBar actionBar = getActionBar();
+		ActionBar actionBar = getSupportActionBar();
 		if (actionBar != null) {
 			actionBar.setHomeButtonEnabled(this.accountList.size() > 0);
 			actionBar.setDisplayHomeAsUpEnabled(this.accountList.size() > 0);
@@ -76,7 +74,7 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 
 		super.onCreate(savedInstanceState);
 
-		setContentView(R.layout.manage_accounts);
+		setContentView(R.layout.activity_manage_accounts);
 
 		if (savedInstanceState != null) {
 			String jid = savedInstanceState.getString(STATE_SELECTED_ACCOUNT);
@@ -130,12 +128,10 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 		if (this.selectedAccount.isEnabled()) {
 			menu.findItem(R.id.mgmt_account_enable).setVisible(false);
 			menu.findItem(R.id.mgmt_account_announce_pgp).setVisible(Config.supportOpenPgp());
-			menu.findItem(R.id.mgmt_account_change_presence).setVisible(manuallyChangePresence());
 		} else {
 			menu.findItem(R.id.mgmt_account_disable).setVisible(false);
 			menu.findItem(R.id.mgmt_account_announce_pgp).setVisible(false);
 			menu.findItem(R.id.mgmt_account_publish_avatar).setVisible(false);
-			menu.findItem(R.id.mgmt_account_change_presence).setVisible(false);
 		}
 		menu.setHeaderTitle(this.selectedAccount.getJid().toBareJid().toString());
 	}
@@ -196,9 +192,6 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 			case R.id.mgmt_account_announce_pgp:
 				publishOpenPGPPublicKey(selectedAccount);
 				return true;
-			case R.id.mgmt_account_change_presence:
-				changePresence(selectedAccount);
-				return true;
 			default:
 				return super.onContextItemSelected(item);
 		}
@@ -245,12 +238,6 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 		} else {
 			return super.onNavigateUp();
 		}
-	}
-
-	private void changePresence(Account account) {
-		Intent intent = new Intent(this, SetPresenceActivity.class);
-		intent.putExtra(SetPresenceActivity.EXTRA_ACCOUNT,account.getJid().toBareJid().toString());
-		startActivity(intent);
 	}
 
 	public void onClickTglAccountState(Account account, boolean enable) {

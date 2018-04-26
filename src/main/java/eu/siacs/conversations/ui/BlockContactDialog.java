@@ -1,6 +1,6 @@
 package eu.siacs.conversations.ui;
 
-import android.app.AlertDialog;
+import android.support.v7.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.text.SpannableString;
@@ -18,8 +18,7 @@ import eu.siacs.conversations.entities.Blockable;
 import eu.siacs.conversations.entities.Conversation;
 
 public final class BlockContactDialog {
-	public static void show(final XmppActivity xmppActivity,
-			final Blockable blockable) {
+	public static void show(final XmppActivity xmppActivity, final Blockable blockable) {
 		final AlertDialog.Builder builder = new AlertDialog.Builder(xmppActivity);
 		final boolean isBlocked = blockable.isBlocked();
 		builder.setNegativeButton(R.string.cancel, null);

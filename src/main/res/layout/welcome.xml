@@ -5,7 +5,7 @@
             android:fillViewport="true">
     <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:background="?attr/color_background_primary">
 
         <LinearLayout
@@ -28,22 +28,19 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/welcome_header"
-                android:textColor="?attr/color_text_primary"
-                android:textSize="?attr/TextSizeHeadline"
-                android:textStyle="bold"/>
+                android:textAppearance="@style/TextAppearance.AppCompat.Title"/>
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/welcome_text"
-                android:textColor="?attr/color_text_primary"
-                android:textSize="?attr/TextSizeBody"/>
+                android:textAppearance="@style/TextAppearance.AppCompat.Body1"/>
             <Button
                 android:id="@+id/create_account"
                 style="?android:attr/borderlessButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="end"
+                android:layout_gravity="right"
                 android:text="@string/create_account"
                 android:textColor="@color/accent"/>
             <Button
@@ -51,9 +48,9 @@
                 style="?android:attr/borderlessButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="end"
+                android:layout_gravity="right"
                 android:text="@string/use_own_provider"
-                android:textColor="?attr/color_text_secondary"/>
+                android:textColor="?android:textColorSecondary"/>
         </LinearLayout>
         <RelativeLayout
             android:layout_width="match_parent"
@@ -63,7 +60,6 @@
             android:layout_alignParentStart="true"
             android:layout_alignParentTop="true">
             <ImageView
-                android:contentDescription="@string/image"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerHorizontal="true"
@@ -71,16 +67,16 @@
                 android:padding="8dp"
                 android:src="@drawable/main_logo"/>
         </RelativeLayout>
-        <!--<TextView-->
-            <!--android:paddingLeft="8dp"-->
-            <!--android:paddingRight="8dp"-->
-            <!--android:layout_width="wrap_content"-->
-            <!--android:layout_height="wrap_content"-->
-            <!--android:layout_alignParentBottom="true"-->
-            <!--android:textColor="?attr/color_text_secondary"-->
-            <!--android:textSize="@dimen/fineprint_size"-->
-            <!--android:maxLines="1"-->
-            <!--android:text="@string/free_for_six_month"-->
-            <!--android:layout_centerHorizontal="true"/>-->
+        <TextView
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="@dimen/fineprint_size"
+            android:maxLines="1"
+            android:text="@string/free_for_six_month"
+            android:layout_centerHorizontal="true"/>
     </RelativeLayout>
 </ScrollView>

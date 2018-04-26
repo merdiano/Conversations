@@ -483,8 +483,6 @@ public class UIHelper {
 				} else {
 					return context.getString(R.string.send_message_to_x, conversation.getName());
 				}
-			case Message.ENCRYPTION_OTR:
-				return context.getString(R.string.send_otr_message);
 			case Message.ENCRYPTION_AXOLOTL:
 				AxolotlService axolotlService = conversation.getAccount().getAxolotlService();
 				if (axolotlService != null && axolotlService.trustedSessionVerified(conversation)) {
@@ -532,38 +530,6 @@ public class UIHelper {
 				return new ListItem.Tag(context.getString(R.string.presence_dnd), 0xfff44336);
 			default:
 				return new ListItem.Tag(context.getString(R.string.presence_online), 0xff259b24);
-		}
-	}
-
-	public static String tranlasteType(Context context, String type) {
-		switch (type.toLowerCase()) {
-			case "pc":
-				return context.getString(R.string.type_pc);
-			case "phone":
-				return context.getString(R.string.type_phone);
-			case "tablet":
-				return context.getString(R.string.type_tablet);
-			case "web":
-				return context.getString(R.string.type_web);
-			case "console":
-				return context.getString(R.string.type_console);
-			default:
-				return type;
-		}
-	}
-
-	public static boolean showIconsInPopup(PopupMenu attachFilePopup) {
-		try {
-			Field field = attachFilePopup.getClass().getDeclaredField("mPopup");
-			field.setAccessible(true);
-			Object menuPopupHelper = field.get(attachFilePopup);
-			Class<?> cls = Class.forName("com.android.internal.view.menu.MenuPopupHelper");
-			Method method = cls.getDeclaredMethod("setForceShowIcon", new Class[]{boolean.class});
-			method.setAccessible(true);
-			method.invoke(menuPopupHelper, new Object[]{true});
-			return true;
-		} catch (Exception e) {
-			return false;
 		}
 	}
 }
