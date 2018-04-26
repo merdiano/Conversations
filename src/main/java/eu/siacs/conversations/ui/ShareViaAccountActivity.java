@@ -14,8 +14,7 @@ import eu.siacs.conversations.R;
 import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.ui.adapter.AccountAdapter;
-import eu.siacs.conversations.xmpp.jid.InvalidJidException;
-import eu.siacs.conversations.xmpp.jid.Jid;
+import rocks.xmpp.addr.Jid;
 
 public class ShareViaAccountActivity extends XmppActivity {
 	public static final String EXTRA_CONTACT = "contact";
@@ -44,7 +43,8 @@ public class ShareViaAccountActivity extends XmppActivity {
 		super.onCreate(savedInstanceState);
 
 		setContentView(R.layout.activity_manage_accounts);
-
+		setSupportActionBar(findViewById(R.id.toolbar));
+		configureActionBar(getSupportActionBar());
 		accountListView = (ListView) findViewById(R.id.account_list);
 		this.mAccountAdapter = new AccountAdapter(this, accountList, false);
 		accountListView.setAdapter(this.mAccountAdapter);
@@ -57,11 +57,11 @@ public class ShareViaAccountActivity extends XmppActivity {
 				final String body = getIntent().getStringExtra(EXTRA_BODY);
 
 				try {
-					final Jid contact = Jid.fromString(getIntent().getStringExtra(EXTRA_CONTACT));
+					final Jid contact = Jid.of(getIntent().getStringExtra(EXTRA_CONTACT));
 					final Conversation conversation = xmppConnectionService.findOrCreateConversation(
 							account, contact, false, false);
 					switchToConversation(conversation, body, false);
-				} catch (InvalidJidException e) {
+				} catch (IllegalArgumentException e) {
 					// ignore error
 				}
 
@@ -88,11 +88,11 @@ public class ShareViaAccountActivity extends XmppActivity {
 			final Account account = xmppConnectionService.getAccounts().get(0);
 
 			try {
-				final Jid contact = Jid.fromString(getIntent().getStringExtra(EXTRA_CONTACT));
+				final Jid contact = Jid.of(getIntent().getStringExtra(EXTRA_CONTACT));
 				final Conversation conversation = xmppConnectionService.findOrCreateConversation(
 						account, contact, false, false);
 				switchToConversation(conversation, body, false);
-			} catch (InvalidJidException e) {
+			} catch (IllegalArgumentException e) {
 				// ignore error
 			}
 

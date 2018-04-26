@@ -3,7 +3,6 @@ package eu.siacs.conversations.ui;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.SharedPreferences;
@@ -20,6 +19,7 @@ import android.support.design.widget.TextInputLayout;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AlertDialog.Builder;
+import android.support.v7.widget.Toolbar;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -28,7 +28,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.EditText;
@@ -37,7 +36,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TableLayout;
-import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -64,8 +62,9 @@ import eu.siacs.conversations.services.XmppConnectionService.OnAccountUpdate;
 import eu.siacs.conversations.services.XmppConnectionService.OnCaptchaRequested;
 import eu.siacs.conversations.ui.adapter.KnownHostsAdapter;
 import eu.siacs.conversations.ui.adapter.PresenceTemplateAdapter;
+import eu.siacs.conversations.ui.util.MenuDoubleTabUtil;
 import eu.siacs.conversations.ui.util.PendingItem;
-import eu.siacs.conversations.ui.widget.DisabledActionModeCallback;
+import eu.siacs.conversations.ui.util.SoftKeyboardUtils;
 import eu.siacs.conversations.utils.CryptoHelper;
 import eu.siacs.conversations.utils.UIHelper;
 import eu.siacs.conversations.utils.XmppUri;
@@ -75,9 +74,8 @@ import eu.siacs.conversations.xmpp.OnUpdateBlocklist;
 import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.XmppConnection.Features;
 import eu.siacs.conversations.xmpp.forms.Data;
-import eu.siacs.conversations.xmpp.jid.InvalidJidException;
-import eu.siacs.conversations.xmpp.jid.Jid;
 import eu.siacs.conversations.xmpp.pep.Avatar;
+import rocks.xmpp.addr.Jid;
 
 public class EditAccountActivity extends OmemoActivity implements OnAccountUpdate, OnUpdateBlocklist,
 		OnKeyStatusUpdated, OnCaptchaRequested, KeyChainAliasCallback, XmppConnectionService.OnShowErrorToast, XmppConnectionService.OnMamPreferencesFetched {
@@ -87,23 +85,12 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 	private TextInputLayout mAccountJidLayout;
 	private EditText mPassword;
 	private TextInputLayout mPasswordLayout;
-	private CheckBox mRegisterNew;
 	private Button mCancelButton;
 	private Button mSaveButton;
 	private Button mDisableOsOptimizationsButton;
 	private TextView getmDisableOsOptimizationsBody;
 	private TableLayout mMoreTable;
 
-	private TextView mServerInfoSm;
-	private TextView mServerInfoRosterVersion;
-	private TextView mServerInfoCarbons;
-	private TextView mServerInfoMam;
-	private TextView mServerInfoCSI;
-	private TextView mServerInfoBlocking;
-	private TextView mServerInfoPep;
-	private TextView mServerInfoHttpUpload;
-	private TextView mServerInfoPush;
-	private TextView mSessionEst;
 	private TextView mAxolotlFingerprint;
 	private TextView mPgpFingerprint;
 	private TextView mOwnFingerprintDesc;
@@ -153,7 +140,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 				}
 				return;
 			}
-			final boolean registerNewAccount = mRegisterNew.isChecked() && !Config.DISALLOW_REGISTRATION_IN_UI;
+			final boolean registerNewAccount = binding.accountRegisterNew.isChecked() && !Config.DISALLOW_REGISTRATION_IN_UI;
 			if (mUsernameMode && binding.accountJid.getText().toString().contains("@")) {
 				mAccountJidLayout.setError(getString(R.string.invalid_username));
 				removeErrorsOnAllBut(mAccountJidLayout);
@@ -179,11 +166,11 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 			final Jid jid;
 			try {
 				if (mUsernameMode) {
-					jid = Jid.fromParts(binding.accountJid.getText().toString(), getUserModeDomain(), null);
+					jid = Jid.of(binding.accountJid.getText().toString(), getUserModeDomain(), null);
 				} else {
-					jid = Jid.fromString(binding.accountJid.getText().toString());
+					jid = Jid.of(binding.accountJid.getText().toString());
 				}
-			} catch (final InvalidJidException e) {
+			} catch (final IllegalArgumentException e) {
 				if (mUsernameMode) {
 					mAccountJidLayout.setError(getString(R.string.invalid_username));
 				} else {
@@ -221,7 +208,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 				}
 			}
 
-			if (jid.isDomainJid()) {
+			if (jid.getLocal() == null) {
 				if (mUsernameMode) {
 					mAccountJidLayout.setError(getString(R.string.invalid_username));
 				} else {
@@ -252,7 +239,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 					binding.accountJid.requestFocus();
 					return;
 				}
-				mAccount = new Account(jid.toBareJid(), password);
+				mAccount = new Account(jid.asBareJid(), password);
 				mAccount.setPort(numericPort);
 				mAccount.setHostname(hostname);
 				mAccount.setOption(Account.OPTION_USETLS, true);
@@ -282,7 +269,6 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		}
 	};
 	private Toast mFetchingMamPrefsToast;
-	private TableRow mPushRow;
 	private String mSavedInstanceAccount;
 	private boolean mSavedInstanceInit = false;
 	private Button mClearDevicesButton;
@@ -327,7 +313,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 			xmppConnectionService.deleteAccount(mAccount);
 		}
 
-		if (xmppConnectionService.getAccounts().size() == 0) {
+		if (xmppConnectionService.getAccounts().size() == 0 && Config.MAGIC_CREATE_DOMAIN != null) {
 			Intent intent = new Intent(EditAccountActivity.this, WelcomeActivity.class);
 			WelcomeActivity.addInviteUri(intent, getIntent());
 			startActivity(intent);
@@ -396,7 +382,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		public void onClick(final View view) {
 			if (mAccount != null) {
 				final Intent intent = new Intent(getApplicationContext(), PublishProfilePictureActivity.class);
-				intent.putExtra(EXTRA_ACCOUNT, mAccount.getJid().toBareJid().toString());
+				intent.putExtra(EXTRA_ACCOUNT, mAccount.getJid().asBareJid().toString());
 				startActivity(intent);
 			}
 		}
@@ -404,7 +390,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 
 	protected void finishInitialSetup(final Avatar avatar) {
 		runOnUiThread(() -> {
-			hideKeyboard();
+			SoftKeyboardUtils.hideSoftKeyboard(EditAccountActivity.this);
 			final Intent intent;
 			final XmppConnection connection = mAccount.getXmppConnection();
 			final boolean wasFirstAccount = xmppConnectionService != null && xmppConnectionService.getAccounts().size() == 1;
@@ -415,7 +401,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 				}
 			} else {
 				intent = new Intent(getApplicationContext(), PublishProfilePictureActivity.class);
-				intent.putExtra(EXTRA_ACCOUNT, mAccount.getJid().toBareJid().toString());
+				intent.putExtra(EXTRA_ACCOUNT, mAccount.getJid().asBareJid().toString());
 				intent.putExtra("setup", true);
 			}
 			if (wasFirstAccount) {
@@ -436,9 +422,9 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		if (requestCode == REQUEST_CHANGE_STATUS) {
 			PresenceTemplate template = mPendingPresenceTemplate.pop();
 			if (template != null && resultCode == Activity.RESULT_OK) {
-				generateSignature(data,template);
+				generateSignature(data, template);
 			} else {
-				Log.d(Config.LOGTAG,"pgp result not ok");
+				Log.d(Config.LOGTAG, "pgp result not ok");
 			}
 		}
 	}
@@ -450,9 +436,10 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 
 
 	protected void processFingerprintVerification(XmppUri uri, boolean showWarningToast) {
-		if (mAccount != null && mAccount.getJid().toBareJid().equals(uri.getJid()) && uri.hasFingerprints()) {
+		if (mAccount != null && mAccount.getJid().asBareJid().equals(uri.getJid()) && uri.hasFingerprints()) {
 			if (xmppConnectionService.verifyFingerprints(mAccount, uri.getFingerprints())) {
 				Toast.makeText(this, R.string.verified_fingerprints, Toast.LENGTH_SHORT).show();
+				updateAccountInformation(false);
 			}
 		} else if (showWarningToast) {
 			Toast.makeText(this, R.string.invalid_barcode, Toast.LENGTH_SHORT).show();
@@ -495,7 +482,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 			} else {
 				XmppConnection connection = mAccount == null ? null : mAccount.getXmppConnection();
 				URL url = connection != null && mAccount.getStatus() == Account.State.REGISTRATION_WEB ? connection.getRedirectionUrl() : null;
-				if (url != null && mRegisterNew.isChecked()) {
+				if (url != null && this.binding.accountRegisterNew.isChecked()) {
 					this.mSaveButton.setText(R.string.open_website);
 				} else {
 					this.mSaveButton.setText(R.string.next);
@@ -517,9 +504,9 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 	protected boolean jidEdited() {
 		final String unmodified;
 		if (mUsernameMode) {
-			unmodified = this.mAccount.getJid().getLocalpart();
+			unmodified = this.mAccount.getJid().getLocal();
 		} else {
-			unmodified = this.mAccount.getJid().toBareJid().toString();
+			unmodified = this.mAccount.getJid().asBareJid().toString();
 		}
 		return !unmodified.equals(this.binding.accountJid.getText().toString());
 	}
@@ -549,6 +536,8 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 			this.mSavedInstanceInit = savedInstanceState.getBoolean("initMode", false);
 		}
 		this.binding = DataBindingUtil.setContentView(this, R.layout.activity_edit_account);
+		setSupportActionBar((Toolbar) binding.toolbar);
+		configureActionBar(getSupportActionBar());
 		binding.accountJid.addTextChangedListener(this.mTextWatcher);
 		binding.accountJid.setOnFocusChangeListener(this.mEditTextFocusListener);
 		this.mAccountJidLayout = (TextInputLayout) findViewById(R.id.account_jid_layout);
@@ -557,20 +546,8 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		this.mPasswordLayout = (TextInputLayout) findViewById(R.id.account_password_layout);
 		this.mAvatar = (ImageView) findViewById(R.id.avater);
 		this.mAvatar.setOnClickListener(this.mAvatarClickListener);
-		this.mRegisterNew = (CheckBox) findViewById(R.id.account_register_new);
 		this.mDisableOsOptimizationsButton = (Button) findViewById(R.id.os_optimization_disable);
 		this.getmDisableOsOptimizationsBody = (TextView) findViewById(R.id.os_optimization_body);
-		this.mSessionEst = (TextView) findViewById(R.id.session_est);
-		this.mServerInfoRosterVersion = (TextView) findViewById(R.id.server_info_roster_version);
-		this.mServerInfoCarbons = (TextView) findViewById(R.id.server_info_carbons);
-		this.mServerInfoMam = (TextView) findViewById(R.id.server_info_mam);
-		this.mServerInfoCSI = (TextView) findViewById(R.id.server_info_csi);
-		this.mServerInfoBlocking = (TextView) findViewById(R.id.server_info_blocking);
-		this.mServerInfoSm = (TextView) findViewById(R.id.server_info_sm);
-		this.mServerInfoPep = (TextView) findViewById(R.id.server_info_pep);
-		this.mServerInfoHttpUpload = (TextView) findViewById(R.id.server_info_http_upload);
-		this.mPushRow = (TableRow) findViewById(R.id.push_row);
-		this.mServerInfoPush = (TextView) findViewById(R.id.server_info_push);
 		this.mPgpFingerprintBox = (RelativeLayout) findViewById(R.id.pgp_fingerprint_box);
 		this.mPgpFingerprint = (TextView) findViewById(R.id.pgp_fingerprint);
 		this.getmPgpFingerprintDesc = (TextView) findViewById(R.id.pgp_fingerprint_desc);
@@ -586,12 +563,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		this.mHostname.setOnFocusChangeListener(mEditTextFocusListener);
 		this.mHostnameLayout = (TextInputLayout) findViewById(R.id.hostname_layout);
 		this.mClearDevicesButton = (Button) findViewById(R.id.clear_devices);
-		this.mClearDevicesButton.setOnClickListener(new OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				showWipePepDialog();
-			}
-		});
+		this.mClearDevicesButton.setOnClickListener(v -> showWipePepDialog());
 		this.mPort = (EditText) findViewById(R.id.port);
 		this.mPort.setText("5222");
 		this.mPort.addTextChangedListener(mTextWatcher);
@@ -610,9 +582,9 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 				updateSaveButton();
 			}
 		};
-		this.mRegisterNew.setOnCheckedChangeListener(OnCheckedShowConfirmPassword);
+		this.binding.accountRegisterNew.setOnCheckedChangeListener(OnCheckedShowConfirmPassword);
 		if (Config.DISALLOW_REGISTRATION_IN_UI) {
-			this.mRegisterNew.setVisibility(View.GONE);
+			this.binding.accountRegisterNew.setVisibility(View.GONE);
 		}
 	}
 
@@ -640,7 +612,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 				changePassword.setVisible(false);
 			}
 			mamPrefs.setVisible(mAccount.getXmppConnection().getFeatures().mam());
-			changePresence.setVisible(true);
+			changePresence.setVisible(!mInitMode);
 		} else {
 			showBlocklist.setVisible(false);
 			showMoreInfo.setVisible(false);
@@ -663,28 +635,29 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 	@Override
 	protected void onStart() {
 		super.onStart();
+		final Intent intent = getIntent();
 		final int theme = findTheme();
 		if (this.mTheme != theme) {
 			recreate();
-		} else if (getIntent() != null) {
+		} else if (intent != null) {
 			try {
-				this.jidToEdit = Jid.fromString(getIntent().getStringExtra("jid"));
-			} catch (final InvalidJidException | NullPointerException ignored) {
+				this.jidToEdit = Jid.of(intent.getStringExtra("jid"));
+			} catch (final IllegalArgumentException | NullPointerException ignored) {
 				this.jidToEdit = null;
 			}
-			if (jidToEdit != null && getIntent().getData() != null) {
-				final XmppUri uri = new XmppUri(getIntent().getData());
+			if (jidToEdit != null && intent.getData() != null && intent.getBooleanExtra("scanned", false)) {
+				final XmppUri uri = new XmppUri(intent.getData());
 				if (xmppConnectionServiceBound) {
 					processFingerprintVerification(uri, false);
 				} else {
 					this.pendingUri = uri;
 				}
 			}
-			boolean init = getIntent().getBooleanExtra("init", false);
+			boolean init = intent.getBooleanExtra("init", false);
 			this.mInitMode = init || this.jidToEdit == null;
-			this.messageFingerprint = getIntent().getStringExtra("fingerprint");
+			this.messageFingerprint = intent.getStringExtra("fingerprint");
 			if (!mInitMode) {
-				this.mRegisterNew.setVisibility(View.GONE);
+				this.binding.accountRegisterNew.setVisibility(View.GONE);
 				if (getSupportActionBar() != null) {
 					getSupportActionBar().setTitle(getString(R.string.account_details));
 				}
@@ -721,7 +694,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 	@Override
 	public void onSaveInstanceState(final Bundle savedInstanceState) {
 		if (mAccount != null) {
-			savedInstanceState.putString("account", mAccount.getJid().toBareJid().toString());
+			savedInstanceState.putString("account", mAccount.getJid().asBareJid().toString());
 			savedInstanceState.putBoolean("initMode", mInitMode);
 			savedInstanceState.putBoolean("showMoreTable", mMoreTable.getVisibility() == View.VISIBLE);
 		}
@@ -732,10 +705,10 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		boolean init = true;
 		if (mSavedInstanceAccount != null) {
 			try {
-				this.mAccount = xmppConnectionService.findAccountByJid(Jid.fromString(mSavedInstanceAccount));
+				this.mAccount = xmppConnectionService.findAccountByJid(Jid.of(mSavedInstanceAccount));
 				this.mInitMode = mSavedInstanceInit;
 				init = false;
-			} catch (InvalidJidException e) {
+			} catch (IllegalArgumentException e) {
 				this.mAccount = null;
 			}
 
@@ -783,7 +756,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 
 	private String getUserModeDomain() {
 		if (mAccount != null) {
-			return mAccount.getJid().getDomainpart();
+			return mAccount.getJid().getDomain();
 		} else {
 			return Config.DOMAIN_LOCK;
 		}
@@ -791,6 +764,9 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 
 	@Override
 	public boolean onOptionsItemSelected(final MenuItem item) {
+		if (MenuDoubleTabUtil.shouldIgnoreTap()) {
+			return false;
+		}
 		switch (item.getItemId()) {
 			case R.id.action_show_block_list:
 				final Intent showBlocklistIntent = new Intent(this, BlocklistActivity.class);
@@ -854,15 +830,15 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
 		boolean manualStatus = sharedPreferences.getBoolean(SettingsActivity.MANUALLY_CHANGE_PRESENCE, getResources().getBoolean(R.bool.manually_change_presence));
 		AlertDialog.Builder builder = new AlertDialog.Builder(this);
-		final DialogPresenceBinding binding = DataBindingUtil.inflate(getLayoutInflater(),R.layout.dialog_presence,null,false);
+		final DialogPresenceBinding binding = DataBindingUtil.inflate(getLayoutInflater(), R.layout.dialog_presence, null, false);
 		String current = mAccount.getPresenceStatusMessage();
 		if (current != null && !current.trim().isEmpty()) {
 			binding.statusMessage.append(current);
 		}
-		setAvailabilityRadioButton(mAccount.getPresenceStatus(),binding);
+		setAvailabilityRadioButton(mAccount.getPresenceStatus(), binding);
 		binding.show.setVisibility(manualStatus ? View.VISIBLE : View.GONE);
 		List<PresenceTemplate> templates = xmppConnectionService.getPresenceTemplates(mAccount);
-		PresenceTemplateAdapter presenceTemplateAdapter = new PresenceTemplateAdapter(this,R.layout.simple_list_item,templates);
+		PresenceTemplateAdapter presenceTemplateAdapter = new PresenceTemplateAdapter(this, R.layout.simple_list_item, templates);
 		binding.statusMessage.setAdapter(presenceTemplateAdapter);
 		binding.statusMessage.setOnItemClickListener((parent, view, position, id) -> {
 			PresenceTemplate template = (PresenceTemplate) parent.getItemAtPosition(position);
@@ -870,9 +846,9 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		});
 		builder.setTitle(R.string.edit_status_message_title);
 		builder.setView(binding.getRoot());
-		builder.setNegativeButton(R.string.cancel,null);
+		builder.setNegativeButton(R.string.cancel, null);
 		builder.setPositiveButton(R.string.confirm, (dialog, which) -> {
-			PresenceTemplate template = new PresenceTemplate(getAvailabilityRadioButton(binding),binding.statusMessage.getText().toString().trim());
+			PresenceTemplate template = new PresenceTemplate(getAvailabilityRadioButton(binding), binding.statusMessage.getText().toString().trim());
 			if (mAccount.getPgpId() != 0 && hasPgp()) {
 				generateSignature(null, template);
 			} else {
@@ -886,7 +862,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		xmppConnectionService.getPgpEngine().generateSignature(intent, mAccount, template.getStatusMessage(), new UiCallback<String>() {
 			@Override
 			public void success(String signature) {
-				xmppConnectionService.changeStatus(mAccount,template,signature);
+				xmppConnectionService.changeStatus(mAccount, template, signature);
 			}
 
 			@Override
@@ -948,9 +924,9 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		if (init) {
 			this.binding.accountJid.getEditableText().clear();
 			if (mUsernameMode) {
-				this.binding.accountJid.getEditableText().append(this.mAccount.getJid().getLocalpart());
+				this.binding.accountJid.getEditableText().append(this.mAccount.getJid().getLocal());
 			} else {
-				this.binding.accountJid.getEditableText().append(this.mAccount.getJid().toBareJid().toString());
+				this.binding.accountJid.getEditableText().append(this.mAccount.getJid().asBareJid().toString());
 			}
 			this.mPassword.getEditableText().clear();
 			this.mPassword.getEditableText().append(this.mAccount.getPassword());
@@ -980,12 +956,19 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 		} else {
 			this.mAvatar.setVisibility(View.GONE);
 		}
-		if (this.mAccount.isOptionSet(Account.OPTION_REGISTER)) {
-			this.mRegisterNew.setVisibility(View.VISIBLE);
-			this.mRegisterNew.setChecked(true);
+		this.binding.accountRegisterNew.setChecked(this.mAccount.isOptionSet(Account.OPTION_REGISTER));
+		if (this.mAccount.isOptionSet(Account.OPTION_MAGIC_CREATE)) {
+			if (this.mAccount.isOptionSet(Account.OPTION_REGISTER)) {
+				ActionBar actionBar = getSupportActionBar();
+				if (actionBar != null) {
+					actionBar.setTitle(R.string.create_account);
+				}
+			}
+			this.binding.accountRegisterNew.setVisibility(View.GONE);
+		} else if (this.mAccount.isOptionSet(Account.OPTION_REGISTER)) {
+			this.binding.accountRegisterNew.setVisibility(View.VISIBLE);
 		} else {
-			this.mRegisterNew.setVisibility(View.GONE);
-			this.mRegisterNew.setChecked(false);
+			this.binding.accountRegisterNew.setVisibility(View.GONE);
 		}
 		if (this.mAccount.isOnlineAndConnected() && !this.mFetchingAvatar) {
 			Features features = this.mAccount.getXmppConnection().getFeatures();
@@ -993,63 +976,62 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 			boolean showBatteryWarning = !xmppConnectionService.getPushManagementService().available(mAccount) && isOptimizingBattery();
 			boolean showDataSaverWarning = isAffectedByDataSaver();
 			showOsOptimizationWarning(showBatteryWarning, showDataSaverWarning);
-			this.mSessionEst.setText(UIHelper.readableTimeDifferenceFull(this, this.mAccount.getXmppConnection()
+			this.binding.sessionEst.setText(UIHelper.readableTimeDifferenceFull(this, this.mAccount.getXmppConnection()
 					.getLastSessionEstablished()));
 			if (features.rosterVersioning()) {
-				this.mServerInfoRosterVersion.setText(R.string.server_info_available);
+				this.binding.serverInfoRosterVersion.setText(R.string.server_info_available);
 			} else {
-				this.mServerInfoRosterVersion.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoRosterVersion.setText(R.string.server_info_unavailable);
 			}
 			if (features.carbons()) {
-				this.mServerInfoCarbons.setText(R.string.server_info_available);
+				this.binding.serverInfoCarbons.setText(R.string.server_info_available);
 			} else {
-				this.mServerInfoCarbons
-						.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoCarbons.setText(R.string.server_info_unavailable);
 			}
 			if (features.mam()) {
-				this.mServerInfoMam.setText(R.string.server_info_available);
+				this.binding.serverInfoMam.setText(R.string.server_info_available);
 			} else {
-				this.mServerInfoMam.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoMam.setText(R.string.server_info_unavailable);
 			}
 			if (features.csi()) {
-				this.mServerInfoCSI.setText(R.string.server_info_available);
+				this.binding.serverInfoCsi.setText(R.string.server_info_available);
 			} else {
-				this.mServerInfoCSI.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoCsi.setText(R.string.server_info_unavailable);
 			}
 			if (features.blocking()) {
-				this.mServerInfoBlocking.setText(R.string.server_info_available);
+				this.binding.serverInfoBlocking.setText(R.string.server_info_available);
 			} else {
-				this.mServerInfoBlocking.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoBlocking.setText(R.string.server_info_unavailable);
 			}
 			if (features.sm()) {
-				this.mServerInfoSm.setText(R.string.server_info_available);
+				this.binding.serverInfoSm.setText(R.string.server_info_available);
 			} else {
-				this.mServerInfoSm.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoSm.setText(R.string.server_info_unavailable);
 			}
 			if (features.pep()) {
 				AxolotlService axolotlService = this.mAccount.getAxolotlService();
 				if (axolotlService != null && axolotlService.isPepBroken()) {
-					this.mServerInfoPep.setText(R.string.server_info_broken);
+					this.binding.serverInfoPep.setText(R.string.server_info_broken);
 				} else if (features.pepPublishOptions() || features.pepOmemoWhitelisted()) {
-					this.mServerInfoPep.setText(R.string.server_info_available);
+					this.binding.serverInfoPep.setText(R.string.server_info_available);
 				} else {
-					this.mServerInfoPep.setText(R.string.server_info_partial);
+					this.binding.serverInfoPep.setText(R.string.server_info_partial);
 				}
 			} else {
-				this.mServerInfoPep.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoPep.setText(R.string.server_info_unavailable);
 			}
 			if (features.httpUpload(0)) {
-				this.mServerInfoHttpUpload.setText(R.string.server_info_available);
+				this.binding.serverInfoHttpUpload.setText(R.string.server_info_available);
 			} else {
-				this.mServerInfoHttpUpload.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoHttpUpload.setText(R.string.server_info_unavailable);
 			}
 
-			this.mPushRow.setVisibility(xmppConnectionService.getPushManagementService().isStub() ? View.GONE : View.VISIBLE);
+			this.binding.pushRow.setVisibility(xmppConnectionService.getPushManagementService().isStub() ? View.GONE : View.VISIBLE);
 
 			if (xmppConnectionService.getPushManagementService().available(mAccount)) {
-				this.mServerInfoPush.setText(R.string.server_info_available);
+				this.binding.serverInfoPush.setText(R.string.server_info_available);
 			} else {
-				this.mServerInfoPush.setText(R.string.server_info_unavailable);
+				this.binding.serverInfoPush.setText(R.string.server_info_unavailable);
 			}
 			final long pgpKeyId = this.mAccount.getPgpId();
 			if (pgpKeyId != 0 && Config.supportOpenPgp()) {
@@ -1059,7 +1041,7 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 				this.mPgpFingerprint.setText(OpenPgpUtils.convertKeyIdToHex(pgpKeyId));
 				this.mPgpFingerprint.setOnClickListener(openPgp);
 				if ("pgp".equals(messageFingerprint)) {
-					this.getmPgpFingerprintDesc.setTextAppearance(this,R.style.TextAppearance_Conversations_Caption_Highlight);
+					this.getmPgpFingerprintDesc.setTextAppearance(this, R.style.TextAppearance_Conversations_Caption_Highlight);
 				}
 				this.getmPgpFingerprintDesc.setOnClickListener(openPgp);
 				this.mPgpDeleteFingerprintButton.setOnClickListener(delete);
@@ -1070,10 +1052,10 @@ public class EditAccountActivity extends OmemoActivity implements OnAccountUpdat
 			if (ownAxolotlFingerprint != null && Config.supportOmemo()) {
 				this.mAxolotlFingerprintBox.setVisibility(View.VISIBLE);
 				if (ownAxolotlFingerprint.equals(messageFingerprint)) {
-					this.mOwnFingerprintDesc.setTextAppearance(this,R.style.TextAppearance_Conversations_Caption_Highlight);
+					this.mOwnFingerprintDesc.setTextAppearance(this, R.style.TextAppearance_Conversations_Caption_Highlight);
 					this.mOwnFingerprintDesc.setText(R.string.omemo_fingerprint_selected_message);
 				} else {
-					this.mOwnFingerprintDesc.setTextAppearance(this,R.style.TextAppearance_Conversations_Caption);
+					this.mOwnFingerprintDesc.setTextAppearance(this, R.style.TextAppearance_Conversations_Caption);
 					this.mOwnFingerprintDesc.setText(R.string.omemo_fingerprint);
 				}
 				this.mAxolotlFingerprint.setText(CryptoHelper.prettifyFingerprint(ownAxolotlFingerprint.substring(2)));

@@ -32,9 +32,9 @@ package eu.siacs.conversations.ui;
 import android.app.Activity;
 import android.app.Fragment;
 
-public abstract class XmppFragment extends Fragment {
+import eu.siacs.conversations.ui.interfaces.OnBackendConnected;
 
-	abstract void onBackendConnected();
+public abstract class XmppFragment extends Fragment implements OnBackendConnected {
 
 	abstract void refresh();
 

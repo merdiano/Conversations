@@ -13,48 +13,60 @@ import eu.siacs.conversations.services.AttachFileToConversationRunnable;
 
 public class SerialSingleThreadExecutor implements Executor {
 
-	final Executor executor = Executors.newSingleThreadExecutor();
-	protected final ArrayDeque<Runnable> tasks = new ArrayDeque<>();
-	private Runnable active;
+	private final Executor executor = Executors.newSingleThreadExecutor();
+	final ArrayDeque<Runnable> tasks = new ArrayDeque<>();
+	protected Runnable active;
 	private final String name;
 
 	public SerialSingleThreadExecutor(String name) {
 		this(name, false);
 	}
 
-	public SerialSingleThreadExecutor(String name, boolean prepareLooper) {
+	SerialSingleThreadExecutor(String name, boolean prepareLooper) {
 		if (prepareLooper) {
-			execute(new Runnable() {
-				@Override
-				public void run() {
-					Looper.prepare();
-				}
-			});
+			execute(Looper::prepare);
 		}
 		this.name = name;
 	}
 
 	public synchronized void execute(final Runnable r) {
-		tasks.offer(new Runnable() {
-			public void run() {
-				try {
-					r.run();
-				} finally {
-					scheduleNext();
-				}
-			}
-		});
+		tasks.offer(new Runner(r));
 		if (active == null) {
 			scheduleNext();
 		}
 	}
 
-	protected synchronized void scheduleNext() {
-		if ((active =  tasks.poll()) != null) {
+	private synchronized void scheduleNext() {
+		if ((active = tasks.poll()) != null) {
 			executor.execute(active);
 			int remaining = tasks.size();
 			if (remaining > 0) {
 				Log.d(Config.LOGTAG,remaining+" remaining tasks on executor '"+name+"'");
+			}
+		}
+	}
+
+	private class Runner implements Runnable, Cancellable {
+
+		private final Runnable runnable;
+
+		private Runner(Runnable runnable) {
+			this.runnable = runnable;
+		}
+
+		@Override
+		public void cancel() {
+			if (runnable instanceof Cancellable) {
+				((Cancellable) runnable).cancel();
+			}
+		}
+
+		@Override
+		public void run() {
+			try {
+				runnable.run();
+			} finally {
+				scheduleNext();
 			}
 		}
 	}

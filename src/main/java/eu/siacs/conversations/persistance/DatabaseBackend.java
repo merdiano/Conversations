@@ -4,10 +4,10 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
-import android.database.sqlite.SQLiteCantOpenDatabaseException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.util.Base64;
 import android.util.Log;
 
@@ -28,7 +28,6 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -53,9 +52,8 @@ import eu.siacs.conversations.services.ShortcutService;
 import eu.siacs.conversations.utils.CryptoHelper;
 import eu.siacs.conversations.utils.MimeUtils;
 import eu.siacs.conversations.utils.Resolver;
-import eu.siacs.conversations.xmpp.jid.InvalidJidException;
-import eu.siacs.conversations.xmpp.jid.Jid;
 import eu.siacs.conversations.xmpp.mam.MamReference;
+import rocks.xmpp.addr.Jid;
 
 public class DatabaseBackend extends SQLiteOpenHelper {
 
@@ -320,7 +318,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 					continue;
 				}
 				int ownDeviceId = Integer.valueOf(ownDeviceIdString);
-				SignalProtocolAddress ownAddress = new SignalProtocolAddress(account.getJid().toBareJid().toPreppedString(), ownDeviceId);
+				SignalProtocolAddress ownAddress = new SignalProtocolAddress(account.getJid().asBareJid().toString(), ownDeviceId);
 				deleteSession(db, account, ownAddress);
 				IdentityKeyPair identityKeyPair = loadOwnIdentityKeyPair(db, account);
 				if (identityKeyPair != null) {
@@ -335,7 +333,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 									+ SQLiteAxolotlStore.FINGERPRINT + " = ? ",
 							selectionArgs);
 				} else {
-					Log.d(Config.LOGTAG, account.getJid().toBareJid() + ": could not load own identity key pair");
+					Log.d(Config.LOGTAG, account.getJid().asBareJid() + ": could not load own identity key pair");
 				}
 			}
 		}
@@ -497,10 +495,8 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		while (cursor.moveToNext()) {
 			String newJid;
 			try {
-				newJid = Jid.fromString(
-						cursor.getString(cursor.getColumnIndex(Conversation.CONTACTJID))
-				).toPreppedString();
-			} catch (InvalidJidException ignored) {
+				newJid = Jid.of(cursor.getString(cursor.getColumnIndex(Conversation.CONTACTJID))).toString();
+			} catch (IllegalArgumentException ignored) {
 				Log.e(Config.LOGTAG, "Failed to migrate Conversation CONTACTJID "
 						+ cursor.getString(cursor.getColumnIndex(Conversation.CONTACTJID))
 						+ ": " + ignored + ". Skipping...");
@@ -522,10 +518,8 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		while (cursor.moveToNext()) {
 			String newJid;
 			try {
-				newJid = Jid.fromString(
-						cursor.getString(cursor.getColumnIndex(Contact.JID))
-				).toPreppedString();
-			} catch (InvalidJidException ignored) {
+				newJid = Jid.of(cursor.getString(cursor.getColumnIndex(Contact.JID))).toString();
+			} catch (IllegalArgumentException ignored) {
 				Log.e(Config.LOGTAG, "Failed to migrate Contact JID "
 						+ cursor.getString(cursor.getColumnIndex(Contact.JID))
 						+ ": " + ignored + ". Skipping...");
@@ -549,12 +543,12 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		while (cursor.moveToNext()) {
 			String newServer;
 			try {
-				newServer = Jid.fromParts(
+				newServer = Jid.of(
 						cursor.getString(cursor.getColumnIndex(Account.USERNAME)),
 						cursor.getString(cursor.getColumnIndex(Account.SERVER)),
-						"mobile"
-				).getDomainpart();
-			} catch (InvalidJidException ignored) {
+						null
+				).getDomain();
+			} catch (IllegalArgumentException ignored) {
 				Log.e(Config.LOGTAG, "Failed to migrate Account SERVER "
 						+ cursor.getString(cursor.getColumnIndex(Account.SERVER))
 						+ ": " + ignored + ". Skipping...");
@@ -680,8 +674,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		return getMessages(conversations, limit, -1);
 	}
 
-	public ArrayList<Message> getMessages(Conversation conversation, int limit,
-										  long timestamp) {
+	public ArrayList<Message> getMessages(Conversation conversation, int limit, long timestamp) {
 		ArrayList<Message> list = new ArrayList<>();
 		SQLiteDatabase db = this.getReadableDatabase();
 		Cursor cursor;
@@ -711,48 +704,51 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		return list;
 	}
 
+	public Cursor getMessageSearchCursor(String term) {
+		SQLiteDatabase db = this.getReadableDatabase();
+		String SQL = "SELECT "+Message.TABLENAME+".*,"+Conversation.TABLENAME+'.'+Conversation.CONTACTJID+','+Conversation.TABLENAME+'.'+Conversation.ACCOUNT+','+Conversation.TABLENAME+'.'+Conversation.MODE+" FROM "+Message.TABLENAME +" join "+Conversation.TABLENAME+" on "+Message.TABLENAME+'.'+Message.CONVERSATION+'='+Conversation.TABLENAME+'.'+Conversation.UUID+" where "+Message.ENCRYPTION+" NOT IN("+Message.ENCRYPTION_AXOLOTL_NOT_FOR_THIS_DEVICE+','+Message.ENCRYPTION_PGP+','+Message.ENCRYPTION_DECRYPTION_FAILED+") AND "+Message.BODY +" LIKE ? ORDER BY "+Message.TIME_SENT+" DESC limit "+Config.MAX_SEARCH_RESULTS;
+		return db.rawQuery(SQL,new String[]{'%'+term+'%'});
+	}
+
 	public Iterable<Message> getMessagesIterable(final Conversation conversation) {
-		return new Iterable<Message>() {
-			@Override
-			public Iterator<Message> iterator() {
-				class MessageIterator implements Iterator<Message> {
-					SQLiteDatabase db = getReadableDatabase();
-					String[] selectionArgs = {conversation.getUuid()};
-					Cursor cursor = db.query(Message.TABLENAME, null, Message.CONVERSATION
-							+ "=?", selectionArgs, null, null, Message.TIME_SENT
-							+ " ASC", null);
+		return () -> {
+			class MessageIterator implements Iterator<Message> {
+				private SQLiteDatabase db = getReadableDatabase();
+				private String[] selectionArgs = {conversation.getUuid()};
+				private Cursor cursor = db.query(Message.TABLENAME, null, Message.CONVERSATION
+						+ "=?", selectionArgs, null, null, Message.TIME_SENT
+						+ " ASC", null);
 
-					public MessageIterator() {
-						cursor.moveToFirst();
-					}
-
-					@Override
-					public boolean hasNext() {
-						return !cursor.isAfterLast();
-					}
-
-					@Override
-					public Message next() {
-						Message message = Message.fromCursor(cursor, conversation);
-						cursor.moveToNext();
-						return message;
-					}
-
-					@Override
-					public void remove() {
-						throw new UnsupportedOperationException();
-					}
+				private MessageIterator() {
+					cursor.moveToFirst();
 				}
-				return new MessageIterator();
+
+				@Override
+				public boolean hasNext() {
+					return !cursor.isAfterLast();
+				}
+
+				@Override
+				public Message next() {
+					Message message = Message.fromCursor(cursor, conversation);
+					cursor.moveToNext();
+					return message;
+				}
+
+				@Override
+				public void remove() {
+					throw new UnsupportedOperationException();
+				}
 			}
+			return new MessageIterator();
 		};
 	}
 
 	public Conversation findConversation(final Account account, final Jid contactJid) {
 		SQLiteDatabase db = this.getReadableDatabase();
 		String[] selectionArgs = {account.getUuid(),
-				contactJid.toBareJid().toPreppedString() + "/%",
-				contactJid.toBareJid().toPreppedString()
+				contactJid.asBareJid().toString() + "/%",
+				contactJid.asBareJid().toString()
 		};
 		Cursor cursor = db.query(Conversation.TABLENAME, null,
 				Conversation.ACCOUNT + "=? AND (" + Conversation.CONTACTJID
@@ -783,10 +779,11 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		SQLiteDatabase db = this.getReadableDatabase();
 		final List<Jid> jids = new ArrayList<>();
 		final String[] columns = new String[]{Account.USERNAME, Account.SERVER};
-		Cursor cursor = db.query(Account.TABLENAME,columns,null,null,null,null,null);
+		String where = "not options & (1 <<1)";
+		Cursor cursor = db.query(Account.TABLENAME,columns,where,null,null,null,null);
 		try {
 			while(cursor.moveToNext()) {
-				jids.add(Jid.fromParts(cursor.getString(0),cursor.getString(1),null));
+				jids.add(Jid.of(cursor.getString(0),cursor.getString(1),null));
 			}
 			return jids;
 		} catch (Exception e) {
@@ -830,11 +827,10 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		return db;
 	}
 
-	public void updateMessage(Message message) {
+	public boolean updateMessage(Message message) {
 		SQLiteDatabase db = this.getWritableDatabase();
 		String[] args = {message.getUuid()};
-		db.update(Message.TABLENAME, message.getContentValues(), Message.UUID
-				+ "=?", args);
+		return db.update(Message.TABLENAME, message.getContentValues(), Message.UUID + "=?", args) == 1;
 	}
 
 	public void updateMessage(Message message, String uuid) {
@@ -856,6 +852,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 	}
 
 	public void writeRoster(final Roster roster) {
+		long start = SystemClock.elapsedRealtime();
 		final Account account = roster.getAccount();
 		final SQLiteDatabase db = this.getWritableDatabase();
 		db.beginTransaction();
@@ -864,7 +861,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 				db.insert(Contact.TABLENAME, null, contact.getContentValues());
 			} else {
 				String where = Contact.ACCOUNT + "=? AND " + Contact.JID + "=?";
-				String[] whereArgs = {account.getUuid(), contact.getJid().toPreppedString()};
+				String[] whereArgs = {account.getUuid(), contact.getJid().toString()};
 				db.delete(Contact.TABLENAME, where, whereArgs);
 			}
 		}
@@ -872,12 +869,15 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		db.endTransaction();
 		account.setRosterVersion(roster.getVersion());
 		updateAccount(account);
+		long duration = SystemClock.elapsedRealtime() - start;
+		Log.d(Config.LOGTAG,account.getJid().asBareJid()+": persisted roster in "+duration+"ms");
 	}
 
 	public void deleteMessagesInConversation(Conversation conversation) {
-		SQLiteDatabase db = this.getWritableDatabase();
+		final SQLiteDatabase db = this.getWritableDatabase();
 		String[] args = {conversation.getUuid()};
-		db.delete(Message.TABLENAME, Message.CONVERSATION + "=?", args);
+		int num = db.delete(Message.TABLENAME, Message.CONVERSATION + "=?", args);
+		Log.d(Config.LOGTAG,"deleted "+num+" messages for "+conversation.getJid().asBareJid());
 	}
 
 	public boolean expireOldMessages(long timestamp) {
@@ -891,7 +891,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		Cursor cursor = null;
 		try {
 			SQLiteDatabase db = this.getReadableDatabase();
-			String sql = "select messages.timeSent,messages.serverMsgId from accounts join conversations on accounts.uuid=conversations.accountUuid join messages on conversations.uuid=messages.conversationUuid where accounts.uuid=? and (messages.status=0 or messages.carbon=1 or messages.serverMsgId not null) and conversations.mode=0 order by messages.timesent desc limit 1";
+			String sql = "select messages.timeSent,messages.serverMsgId from accounts join conversations on accounts.uuid=conversations.accountUuid join messages on conversations.uuid=messages.conversationUuid where accounts.uuid=? and (messages.status=0 or messages.carbon=1 or messages.serverMsgId not null) and (conversations.mode=0 or (messages.serverMsgId not null and messages.type=4)) order by messages.timesent desc limit 1";
 			String[] args = {account.getUuid()};
 			cursor = db.rawQuery(sql, args);
 			if (cursor.getCount() == 0) {
@@ -1257,7 +1257,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 	}
 
 	private IdentityKeyPair loadOwnIdentityKeyPair(SQLiteDatabase db, Account account) {
-		String name = account.getJid().toBareJid().toPreppedString();
+		String name = account.getJid().asBareJid().toString();
 		IdentityKeyPair identityKeyPair = null;
 		Cursor cursor = getIdentityKeyCursor(db, account, name, true);
 		if (cursor.getCount() != 0) {
@@ -1265,7 +1265,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 			try {
 				identityKeyPair = new IdentityKeyPair(Base64.decode(cursor.getString(cursor.getColumnIndex(SQLiteAxolotlStore.KEY)), Base64.DEFAULT));
 			} catch (InvalidKeyException e) {
-				Log.d(Config.LOGTAG, AxolotlService.getLogprefix(account) + "Encountered invalid IdentityKey in database for account" + account.getJid().toBareJid() + ", address: " + name);
+				Log.d(Config.LOGTAG, AxolotlService.getLogprefix(account) + "Encountered invalid IdentityKey in database for account" + account.getJid().asBareJid() + ", address: " + name);
 			}
 		}
 		cursor.close();
@@ -1290,10 +1290,10 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 				if (key != null) {
 					identityKeys.add(new IdentityKey(Base64.decode(key, Base64.DEFAULT), 0));
 				} else {
-					Log.d(Config.LOGTAG, AxolotlService.getLogprefix(account) + "Missing key (possibly preverified) in database for account" + account.getJid().toBareJid() + ", address: " + name);
+					Log.d(Config.LOGTAG, AxolotlService.getLogprefix(account) + "Missing key (possibly preverified) in database for account" + account.getJid().asBareJid() + ", address: " + name);
 				}
 			} catch (InvalidKeyException e) {
-				Log.d(Config.LOGTAG, AxolotlService.getLogprefix(account) + "Encountered invalid IdentityKey in database for account" + account.getJid().toBareJid() + ", address: " + name);
+				Log.d(Config.LOGTAG, AxolotlService.getLogprefix(account) + "Encountered invalid IdentityKey in database for account" + account.getJid().asBareJid() + ", address: " + name);
 			}
 		}
 		cursor.close();
@@ -1429,7 +1429,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 	}
 
 	public void storeOwnIdentityKeyPair(Account account, IdentityKeyPair identityKeyPair) {
-		storeIdentityKey(account, account.getJid().toBareJid().toPreppedString(), true, CryptoHelper.bytesToHex(identityKeyPair.getPublicKey().serialize()), Base64.encodeToString(identityKeyPair.serialize(), Base64.DEFAULT), FingerprintStatus.createActiveVerified(false));
+		storeIdentityKey(account, account.getJid().asBareJid().toString(), true, CryptoHelper.bytesToHex(identityKeyPair.getPublicKey().serialize()), Base64.encodeToString(identityKeyPair.serialize(), Base64.DEFAULT), FingerprintStatus.createActiveVerified(false));
 	}
 
 
@@ -1474,7 +1474,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 		ArrayList<ShortcutService.FrequentContact> contacts = new ArrayList<>();
 		while(cursor.moveToNext()) {
 			try {
-				contacts.add(new ShortcutService.FrequentContact(cursor.getString(0), Jid.fromString(cursor.getString(1))));
+				contacts.add(new ShortcutService.FrequentContact(cursor.getString(0), Jid.of(cursor.getString(1))));
 			} catch (Exception e) {
 				Log.d(Config.LOGTAG,e.getMessage());
 			}

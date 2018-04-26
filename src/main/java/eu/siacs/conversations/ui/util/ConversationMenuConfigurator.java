@@ -38,19 +38,14 @@ import android.view.MenuItem;
 
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
+import eu.siacs.conversations.crypto.OmemoSetting;
 import eu.siacs.conversations.crypto.axolotl.AxolotlService;
 import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Message;
 
 public class ConversationMenuConfigurator {
 
-	private static boolean showSoundRecorderAttachment = false;
-	private static boolean showLocationAttachment = false;
-
-
 	public static void configureAttachmentMenu(@NonNull Conversation conversation, Menu menu) {
-		final MenuItem menuAttachSoundRecorder = menu.findItem(R.id.attach_record_voice);
-		final MenuItem menuAttachLocation = menu.findItem(R.id.attach_location);
 		final MenuItem menuAttach = menu.findItem(R.id.action_attach_file);
 
 		final boolean visible;
@@ -65,9 +60,6 @@ public class ConversationMenuConfigurator {
 		if (!visible) {
 			return;
 		}
-
-		menuAttachLocation.setVisible(showLocationAttachment);
-		menuAttachSoundRecorder.setVisible(showSoundRecorderAttachment);
 	}
 
 	public static void configureEncryptionMenu(@NonNull Conversation conversation, Menu menu) {
@@ -77,7 +69,9 @@ public class ConversationMenuConfigurator {
 		final MenuItem axolotl = menu.findItem(R.id.encryption_choice_axolotl);
 
 		boolean visible;
-		if (conversation.getMode() == Conversation.MODE_MULTI) {
+		if (OmemoSetting.isAlways()) {
+			visible = false;
+		} else if (conversation.getMode() == Conversation.MODE_MULTI) {
 			visible = (Config.supportOpenPgp() || Config.supportOmemo()) && Config.multipleEncryptionChoices();
 		} else {
 			visible = Config.multipleEncryptionChoices();
@@ -114,10 +108,5 @@ public class ConversationMenuConfigurator {
 				none.setChecked(true);
 				break;
 		}
-	}
-
-	public static void updateAttachmentAvailability(PackageManager packageManager) {
-		showSoundRecorderAttachment = new Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION).resolveActivity(packageManager) != null;
-		showLocationAttachment = new Intent("eu.siacs.conversations.location.request").resolveActivity(packageManager) != null;
 	}
 }

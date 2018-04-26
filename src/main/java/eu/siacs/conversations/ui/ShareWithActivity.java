@@ -5,13 +5,11 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
-import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemClickListener;
-import android.widget.ListView;
 import android.widget.Toast;
 
 import java.net.URLConnection;
@@ -31,8 +29,7 @@ import eu.siacs.conversations.ui.adapter.ConversationAdapter;
 import eu.siacs.conversations.ui.service.EmojiService;
 import eu.siacs.conversations.ui.util.PresenceSelector;
 import eu.siacs.conversations.xmpp.XmppConnection;
-import eu.siacs.conversations.xmpp.jid.InvalidJidException;
-import eu.siacs.conversations.xmpp.jid.Jid;
+import rocks.xmpp.addr.Jid;
 
 public class ShareWithActivity extends XmppActivity implements XmppConnectionService.OnConversationUpdate {
 
@@ -59,7 +56,7 @@ public class ShareWithActivity extends XmppActivity implements XmppConnectionSer
 	private Share share;
 
 	private static final int REQUEST_START_NEW_CONVERSATION = 0x0501;
-	private ListView mListView;
+	private RecyclerView mListView;
 	private ConversationAdapter mAdapter;
 	private List<Conversation> mConversations = new ArrayList<>();
 	private Toast mToast;
@@ -90,11 +87,12 @@ public class ShareWithActivity extends XmppActivity implements XmppConnectionSer
 					} else {
 						resId = R.string.shared_file_with_x;
 					}
-					replaceToast(getString(resId, message.getConversation().getName()));
+					Conversation conversation = (Conversation) message.getConversation();
+					replaceToast(getString(resId, conversation.getName()));
 					if (mReturnToPrevious) {
 						finish();
 					} else {
-						switchToConversation(message.getConversation());
+						switchToConversation(conversation);
 					}
 				}
 			});
@@ -158,25 +156,22 @@ public class ShareWithActivity extends XmppActivity implements XmppConnectionSer
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		new EmojiService(this).init();
+
+		setContentView(R.layout.activity_share_with);
+
+		setSupportActionBar(findViewById(R.id.toolbar));
 		if (getSupportActionBar() != null) {
 			getSupportActionBar().setDisplayHomeAsUpEnabled(false);
 			getSupportActionBar().setHomeButtonEnabled(false);
 		}
 
-		setContentView(R.layout.activity_share_with);
 		setTitle(getString(R.string.title_activity_sharewith));
 
 		mListView = findViewById(R.id.choose_conversation_list);
 		mAdapter = new ConversationAdapter(this, this.mConversations);
+		mListView.setLayoutManager(new LinearLayoutManager(this,LinearLayoutManager.VERTICAL,false));
 		mListView.setAdapter(mAdapter);
-		mListView.setOnItemClickListener(new OnItemClickListener() {
-
-			@Override
-			public void onItemClick(AdapterView<?> arg0, View arg1, int position, long arg3) {
-				share(mConversations.get(position));
-			}
-		});
-
+		mAdapter.setConversationClickListener((view, conversation) -> share(conversation));
 		this.share = new Share();
 	}
 
@@ -266,8 +261,8 @@ public class ShareWithActivity extends XmppActivity implements XmppConnectionSer
 		}else{
 			Account account;
 			try {
-				account = xmppConnectionService.findAccountByJid(Jid.fromString(share.account));
-			} catch (final InvalidJidException e) {
+				account = xmppConnectionService.findAccountByJid(Jid.of(share.account));
+			} catch (final IllegalArgumentException e) {
 				account = null;
 			}
 			if (account == null) {
@@ -276,8 +271,8 @@ public class ShareWithActivity extends XmppActivity implements XmppConnectionSer
 
 			try {
 				conversation = xmppConnectionService
-						.findOrCreateConversation(account, Jid.fromString(share.contact), false,true);
-			} catch (final InvalidJidException e) {
+						.findOrCreateConversation(account, Jid.of(share.contact), false,true);
+			} catch (final IllegalArgumentException e) {
 				return;
 			}
 		}

@@ -3,8 +3,6 @@ package eu.siacs.conversations.ui;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.app.AlertDialog.Builder;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
@@ -36,11 +34,13 @@ import android.os.PowerManager;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.v4.content.ContextCompat;
-import android.support.v7.app.ActionBar;
-import android.support.v7.app.AppCompatActivity;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AlertDialog.Builder;
+import android.support.v7.app.AppCompatDelegate;
 import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
@@ -61,20 +61,20 @@ import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.Contact;
 import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Message;
-import eu.siacs.conversations.entities.MucOptions;
 import eu.siacs.conversations.entities.Presences;
 import eu.siacs.conversations.services.AvatarService;
 import eu.siacs.conversations.services.BarcodeProvider;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.services.XmppConnectionService.XmppConnectionBinder;
+import eu.siacs.conversations.ui.util.MenuDoubleTabUtil;
 import eu.siacs.conversations.ui.util.PresenceSelector;
 import eu.siacs.conversations.utils.ExceptionHelper;
+import eu.siacs.conversations.utils.ThemeHelper;
 import eu.siacs.conversations.xmpp.OnKeyStatusUpdated;
 import eu.siacs.conversations.xmpp.OnUpdateBlocklist;
-import eu.siacs.conversations.xmpp.jid.InvalidJidException;
-import eu.siacs.conversations.xmpp.jid.Jid;
+import rocks.xmpp.addr.Jid;
 
-public abstract class XmppActivity extends AppCompatActivity {
+public abstract class XmppActivity extends ActionBarActivity {
 
 	public static final String EXTRA_ACCOUNT = "account";
 	protected static final int REQUEST_ANNOUNCE_PGP = 0x0101;
@@ -85,12 +85,13 @@ public abstract class XmppActivity extends AppCompatActivity {
 	public boolean xmppConnectionServiceBound = false;
 	protected boolean registeredListeners = false;
 
-	protected int mPrimaryBackgroundColor;
-	protected int mSecondaryBackgroundColor;
 	protected int mColorRed;
 	protected int mColorOrange;
 	protected int mColorGreen;
-	protected int mPrimaryColor;
+
+	protected static final String FRAGMENT_TAG_DIALOG = "dialog";
+
+	private boolean isCameraFeatureAvailable = false;
 
 	protected boolean mUseSubject = true;
 	protected int mTheme;
@@ -247,13 +248,6 @@ public abstract class XmppActivity extends AppCompatActivity {
 		}
 	}
 
-	protected void hideKeyboard() {
-		final InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-		View focus = getCurrentFocus();
-		if (focus != null && inputManager != null) {
-			inputManager.hideSoftInputFromWindow(focus.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
-		}
-	}
 
 	public boolean hasPgp() {
 		return xmppConnectionService.getPgpEngine() != null;
@@ -394,8 +388,8 @@ public abstract class XmppActivity extends AppCompatActivity {
 			} else if (presences.size() == 1) {
 				String presence = presences.toResourceArray()[0];
 				try {
-					conversation.setNextCounterpart(Jid.fromParts(contact.getJid().getLocalpart(), contact.getJid().getDomainpart(), presence));
-				} catch (InvalidJidException e) {
+					conversation.setNextCounterpart(Jid.of(contact.getJid().getLocal(), contact.getJid().getDomain(), presence));
+				} catch (IllegalArgumentException e) {
 					conversation.setNextCounterpart(null);
 				}
 				listener.onPresenceSelected();
@@ -410,31 +404,25 @@ public abstract class XmppActivity extends AppCompatActivity {
 		super.onCreate(savedInstanceState);
 		metrics = getResources().getDisplayMetrics();
 		ExceptionHelper.init(getApplicationContext());
+		this.isCameraFeatureAvailable = getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA);
 
 		mColorRed = ContextCompat.getColor(this, R.color.red800);
 		mColorOrange = ContextCompat.getColor(this, R.color.orange500);
 		mColorGreen = ContextCompat.getColor(this, R.color.green500);
-		mPrimaryColor = ContextCompat.getColor(this, R.color.primary500);
-		mPrimaryBackgroundColor = ContextCompat.getColor(this, R.color.grey50);
-		mSecondaryBackgroundColor = ContextCompat.getColor(this, R.color.grey200);
 
 		this.mTheme = findTheme();
-		if (isDarkTheme()) {
-			mPrimaryBackgroundColor = ContextCompat.getColor(this, R.color.grey800);
-			mSecondaryBackgroundColor = ContextCompat.getColor(this, R.color.grey900);
-		}
 		setTheme(this.mTheme);
 
 		this.mUsingEnterKey = usingEnterKey();
 		mUseSubject = getPreferences().getBoolean("use_subject", getResources().getBoolean(R.bool.use_subject));
-		final ActionBar ab = getSupportActionBar();
-		if (ab != null) {
-			ab.setDisplayHomeAsUpEnabled(true);
-		}
+	}
+
+	protected boolean isCameraFeatureAvailable() {
+		return this.isCameraFeatureAvailable;
 	}
 
 	public boolean isDarkTheme() {
-		return this.mTheme == R.style.ConversationsTheme_Dark;
+		return ThemeHelper.isDark(mTheme);
 	}
 
 	public int getThemeResource(int r_attr_name, int r_drawable_def) {
@@ -498,15 +486,15 @@ public abstract class XmppActivity extends AppCompatActivity {
 	}
 
 	private void switchToConversation(Conversation conversation, String text, String nick, boolean pm, boolean newTask) {
-		Intent intent = new Intent(this, ConversationActivity.class);
-		intent.setAction(ConversationActivity.ACTION_VIEW_CONVERSATION);
-		intent.putExtra(ConversationActivity.EXTRA_CONVERSATION, conversation.getUuid());
+		Intent intent = new Intent(this, ConversationsActivity.class);
+		intent.setAction(ConversationsActivity.ACTION_VIEW_CONVERSATION);
+		intent.putExtra(ConversationsActivity.EXTRA_CONVERSATION, conversation.getUuid());
 		if (text != null) {
-			intent.putExtra(ConversationActivity.EXTRA_TEXT, text);
+			intent.putExtra(ConversationsActivity.EXTRA_TEXT, text);
 		}
 		if (nick != null) {
-			intent.putExtra(ConversationActivity.EXTRA_NICK, nick);
-			intent.putExtra(ConversationActivity.EXTRA_IS_PRIVATE_MESSAGE, pm);
+			intent.putExtra(ConversationsActivity.EXTRA_NICK, nick);
+			intent.putExtra(ConversationsActivity.EXTRA_IS_PRIVATE_MESSAGE, pm);
 		}
 		if (newTask) {
 			intent.setFlags(intent.getFlags()
@@ -527,22 +515,29 @@ public abstract class XmppActivity extends AppCompatActivity {
 	public void switchToContactDetails(Contact contact, String messageFingerprint) {
 		Intent intent = new Intent(this, ContactDetailsActivity.class);
 		intent.setAction(ContactDetailsActivity.ACTION_VIEW_CONTACT);
-		intent.putExtra(EXTRA_ACCOUNT, contact.getAccount().getJid().toBareJid().toString());
+		intent.putExtra(EXTRA_ACCOUNT, contact.getAccount().getJid().asBareJid().toString());
 		intent.putExtra("contact", contact.getJid().toString());
 		intent.putExtra("fingerprint", messageFingerprint);
 		startActivity(intent);
 	}
 
-	public void switchToAccount(Account account) {
-		switchToAccount(account, false);
+	public void switchToAccount(Account account, String fingerprint) {
+		switchToAccount(account, false, fingerprint);
 	}
 
-	public void switchToAccount(Account account, boolean init) {
+	public void switchToAccount(Account account) {
+		switchToAccount(account, false, null);
+	}
+
+	public void switchToAccount(Account account, boolean init, String fingerprint) {
 		Intent intent = new Intent(this, EditAccountActivity.class);
-		intent.putExtra("jid", account.getJid().toBareJid().toString());
+		intent.putExtra("jid", account.getJid().asBareJid().toString());
 		intent.putExtra("init", init);
 		if (init) {
 			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+		}
+		if (fingerprint != null) {
+			intent.putExtra("fingerprint", fingerprint);
 		}
 		startActivity(intent);
 		if (init) {
@@ -842,18 +837,20 @@ public abstract class XmppActivity extends AppCompatActivity {
 	}
 
 	protected int findTheme() {
-		Boolean dark = getPreferences().getString(SettingsActivity.THEME, getResources().getString(R.string.theme)).equals("dark");
-
-		if (dark) {
-			return R.style.ConversationsTheme_Dark;
-		} else {
-			return R.style.ConversationsTheme;
-		}
+		return ThemeHelper.find(this);
 	}
 
 	@Override
 	public void onPause() {
 		super.onPause();
+	}
+
+	@Override
+	public boolean onMenuOpened(int id, Menu menu) {
+		if(id == AppCompatDelegate.FEATURE_SUPPORT_ACTION_BAR && menu != null) {
+			MenuDoubleTabUtil.recordMenuOpen();
+		}
+		return super.onMenuOpened(id, menu);
 	}
 
 	protected void showQrCode() {
@@ -879,8 +876,8 @@ public abstract class XmppActivity extends AppCompatActivity {
 	protected Account extractAccount(Intent intent) {
 		String jid = intent != null ? intent.getStringExtra(EXTRA_ACCOUNT) : null;
 		try {
-			return jid != null ? xmppConnectionService.findAccountByJid(Jid.fromString(jid)) : null;
-		} catch (InvalidJidException e) {
+			return jid != null ? xmppConnectionService.findAccountByJid(Jid.of(jid)) : null;
+		} catch (IllegalArgumentException e) {
 			return null;
 		}
 	}
@@ -935,12 +932,12 @@ public abstract class XmppActivity extends AppCompatActivity {
 				if (data.getBooleanExtra("multiple", false)) {
 					String[] toAdd = data.getStringArrayExtra("contacts");
 					for (String item : toAdd) {
-						invite.jids.add(Jid.fromString(item));
+						invite.jids.add(Jid.of(item));
 					}
 				} else {
-					invite.jids.add(Jid.fromString(data.getStringExtra("contact")));
+					invite.jids.add(Jid.of(data.getStringExtra("contact")));
 				}
-			} catch (final InvalidJidException ignored) {
+			} catch (final IllegalArgumentException ignored) {
 				return null;
 			}
 			return invite;
@@ -958,7 +955,7 @@ public abstract class XmppActivity extends AppCompatActivity {
 				}
 				return false;
 			} else {
-				jids.add(conversation.getJid().toBareJid());
+				jids.add(conversation.getJid().asBareJid());
 				return service.createAdhocConference(conversation.getAccount(), null, jids, activity.adhocCallback);
 			}
 		}

@@ -13,14 +13,25 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <uses-permission
         android:name="android.permission.READ_PHONE_STATE"
         tools:node="remove" />
 
     <uses-sdk tools:overrideLibrary="net.ypresto.androidtranscoder" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
 
     <application
@@ -29,7 +40,9 @@
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/ConversationsTheme"
-        tools:replace="android:label">
+        android:appCategory="social"
+        tools:replace="android:label"
+        tools:targetApi="o">
 
         <meta-data android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
@@ -44,20 +57,45 @@
                 <action android:name="android.media.RINGER_MODE_CHANGED" />
             </intent-filter>
         </receiver>
-
+        <activity
+            android:name=".ui.ShareLocationActivity"
+            android:label="@string/title_activity_share_location"/>
+        <activity
+            android:name=".ui.SearchActivity"
+            android:label="@string/search_messages"/>
+        <activity
+            android:name=".ui.RecordingActivity"
+            android:theme="@style/ConversationsTheme.Dialog"
+            android:configChanges="orientation|screenSize"/>
+        <activity
+            android:name=".ui.ShowLocationActivity"
+            android:label="@string/title_activity_show_location" >
+            <intent-filter>
+                <action android:name="eu.siacs.conversations.location.show" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <data android:scheme="geo" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".ui.ConversationActivity"
-            android:label="@string/app_name"
-            android:launchMode="singleTask"
-            android:minWidth="300dp"
-            android:minHeight="300dp"
-            android:windowSoftInputMode="stateHidden">
+            android:theme="@style/SplashTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".ui.ConversationsActivity"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:minWidth="300dp"
+            android:minHeight="300dp"
+            android:windowSoftInputMode="stateHidden" />
         <activity
             android:name=".ui.ScanActivity"
             android:screenOrientation="portrait"
@@ -98,6 +136,9 @@
             android:name=".ui.StartConversationActivity"
             android:label="@string/title_activity_start_conversation"
             android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+            </intent-filter>
         </activity>
         <activity
             android:name=".ui.WelcomeActivity"
@@ -214,7 +255,12 @@
             android:exported="false"
             android:grantUriPermissions="true"/>
 
-
+        <activity android:name=".ui.ShortcutActivity"
+            android:label="@string/contact">
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_SHORTCUT" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

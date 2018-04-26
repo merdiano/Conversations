@@ -17,8 +17,8 @@ import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.xml.Element;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.chatstate.ChatState;
-import eu.siacs.conversations.xmpp.jid.Jid;
 import eu.siacs.conversations.xmpp.stanzas.MessagePacket;
+import rocks.xmpp.addr.Jid;
 
 public class MessageGenerator extends AbstractGenerator {
 	private static final String OMEMO_FALLBACK_MESSAGE = "I sent you an OMEMO encrypted message but your client doesn’t seem to support that. Find more information on https://conversations.im/omemo";
@@ -29,7 +29,7 @@ public class MessageGenerator extends AbstractGenerator {
 	}
 
 	private MessagePacket preparePacket(Message message) {
-		Conversation conversation = message.getConversation();
+		Conversation conversation = (Conversation) message.getConversation();
 		Account account = conversation.getAccount();
 		MessagePacket packet = new MessagePacket();
 		final boolean isWithSelf = conversation.getContact().isSelf();
@@ -47,7 +47,7 @@ public class MessageGenerator extends AbstractGenerator {
 				packet.addChild("request", "urn:xmpp:receipts");
 			}
 		} else {
-			packet.setTo(message.getCounterpart().toBareJid());
+			packet.setTo(message.getCounterpart().asBareJid());
 			packet.setType(MessagePacket.TYPE_GROUPCHAT);
 		}
 		if (conversation.isSingleOrPrivateAndNonAnonymous() && message.getType() != Message.TYPE_PRIVATE) {
@@ -77,9 +77,7 @@ public class MessageGenerator extends AbstractGenerator {
 			return null;
 		}
 		packet.setAxolotlMessage(axolotlMessage.toElement());
-		if (Config.supportUnencrypted() && !recipientSupportsOmemo(message)) {
-			packet.setBody(OMEMO_FALLBACK_MESSAGE);
-		}
+		packet.setBody(OMEMO_FALLBACK_MESSAGE);
 		packet.addChild("store", "urn:xmpp:hints");
 		packet.addChild("encryption","urn:xmpp:eme:0")
 				.setAttribute("name","OMEMO")
@@ -94,11 +92,6 @@ public class MessageGenerator extends AbstractGenerator {
 		packet.setAxolotlMessage(axolotlMessage.toElement());
 		packet.addChild("store", "urn:xmpp:hints");
 		return packet;
-	}
-
-	private static boolean recipientSupportsOmemo(Message message) {
-		Contact c = message.getContact();
-		return c != null && c.getPresences().allOrNonSupport(AxolotlService.PEP_DEVICE_LIST_NOTIFY);
 	}
 
 	public static void addMessageHints(MessagePacket packet) {
@@ -147,7 +140,7 @@ public class MessageGenerator extends AbstractGenerator {
 		final Account account = conversation.getAccount();
 		MessagePacket packet = new MessagePacket();
 		packet.setType(conversation.getMode() == Conversation.MODE_MULTI ? MessagePacket.TYPE_GROUPCHAT : MessagePacket.TYPE_CHAT);
-		packet.setTo(conversation.getJid().toBareJid());
+		packet.setTo(conversation.getJid().asBareJid());
 		packet.setFrom(account.getJid());
 		packet.addChild(ChatState.toElement(conversation.getOutgoingChatState()));
 		packet.addChild("no-store", "urn:xmpp:hints");
@@ -158,12 +151,12 @@ public class MessageGenerator extends AbstractGenerator {
 	public MessagePacket confirm(final Account account, final Jid to, final String id, final Jid counterpart, final boolean groupChat) {
 		MessagePacket packet = new MessagePacket();
 		packet.setType(groupChat ? MessagePacket.TYPE_GROUPCHAT : MessagePacket.TYPE_CHAT);
-		packet.setTo(groupChat ? to.toBareJid() : to);
+		packet.setTo(groupChat ? to.asBareJid() : to);
 		packet.setFrom(account.getJid());
 		Element displayed = packet.addChild("displayed","urn:xmpp:chat-markers:0");
 		displayed.setAttribute("id", id);
 		if (groupChat && counterpart != null) {
-			displayed.setAttribute("sender",counterpart.toPreppedString());
+			displayed.setAttribute("sender",counterpart.toString());
 		}
 		packet.addChild("store", "urn:xmpp:hints");
 		return packet;
@@ -172,11 +165,11 @@ public class MessageGenerator extends AbstractGenerator {
 	public MessagePacket conferenceSubject(Conversation conversation,String subject) {
 		MessagePacket packet = new MessagePacket();
 		packet.setType(MessagePacket.TYPE_GROUPCHAT);
-		packet.setTo(conversation.getJid().toBareJid());
+		packet.setTo(conversation.getJid().asBareJid());
 		Element subjectChild = new Element("subject");
 		subjectChild.setContent(subject);
 		packet.addChild(subjectChild);
-		packet.setFrom(conversation.getAccount().getJid().toBareJid());
+		packet.setFrom(conversation.getAccount().getJid().asBareJid());
 		return packet;
 	}
 
@@ -186,7 +179,7 @@ public class MessageGenerator extends AbstractGenerator {
 		packet.setTo(contact);
 		packet.setFrom(conversation.getAccount().getJid());
 		Element x = packet.addChild("x", "jabber:x:conference");
-		x.setAttribute("jid", conversation.getJid().toBareJid().toString());
+		x.setAttribute("jid", conversation.getJid().asBareJid().toString());
 		String password = conversation.getMucOptions().getPassword();
 		if (password != null) {
 			x.setAttribute("password",password);
@@ -196,12 +189,12 @@ public class MessageGenerator extends AbstractGenerator {
 
 	public MessagePacket invite(Conversation conversation, Jid contact) {
 		MessagePacket packet = new MessagePacket();
-		packet.setTo(conversation.getJid().toBareJid());
+		packet.setTo(conversation.getJid().asBareJid());
 		packet.setFrom(conversation.getAccount().getJid());
 		Element x = new Element("x");
 		x.setAttribute("xmlns", "http://jabber.org/protocol/muc#user");
 		Element invite = new Element("invite");
-		invite.setAttribute("to", contact.toBareJid().toString());
+		invite.setAttribute("to", contact.asBareJid().toString());
 		x.addChild(invite);
 		packet.addChild(x);
 		return packet;

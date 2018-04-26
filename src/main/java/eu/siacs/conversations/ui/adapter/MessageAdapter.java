@@ -1,5 +1,7 @@
 package eu.siacs.conversations.ui.adapter;
 
+import android.Manifest;
+import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -15,6 +17,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.preference.PreferenceManager;
 import android.support.annotation.ColorInt;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -32,7 +35,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
-import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
@@ -56,6 +58,7 @@ import eu.siacs.conversations.R;
 import eu.siacs.conversations.crypto.axolotl.FingerprintStatus;
 import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.Conversation;
+import eu.siacs.conversations.entities.Conversational;
 import eu.siacs.conversations.entities.DownloadableFile;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.entities.Message.FileParams;
@@ -63,6 +66,7 @@ import eu.siacs.conversations.entities.Transferable;
 import eu.siacs.conversations.persistance.FileBackend;
 import eu.siacs.conversations.services.MessageArchiveService;
 import eu.siacs.conversations.services.NotificationService;
+import eu.siacs.conversations.ui.ConversationsActivity;
 import eu.siacs.conversations.ui.ConversationFragment;
 import eu.siacs.conversations.ui.XmppActivity;
 import eu.siacs.conversations.ui.service.AudioPlayer;
@@ -95,33 +99,39 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 					+ "\\;\\/\\?\\@\\&\\=\\#\\~\\-\\.\\+\\!\\*\\'\\(\\)\\,\\_])"
 					+ "|(?:\\%[a-fA-F0-9]{2}))+");
 
-	private static final Linkify.TransformFilter WEBURL_TRANSFORM_FILTER = new Linkify.TransformFilter() {
-		@Override
-		public String transformUrl(Matcher matcher, String url) {
-			if (url == null) {
-				return null;
-			}
-			final String lcUrl = url.toLowerCase(Locale.US);
-			if (lcUrl.startsWith("http://") || lcUrl.startsWith("https://")) {
-				return url;
-			} else {
-				return "http://" + url;
-			}
+	private static final Linkify.TransformFilter WEBURL_TRANSFORM_FILTER = (matcher, url) -> {
+		if (url == null) {
+			return null;
 		}
-	};
-	private static final Linkify.MatchFilter WEBURL_MATCH_FILTER = new Linkify.MatchFilter() {
-		@Override
-		public boolean acceptMatch(CharSequence cs, int start, int end) {
-			return start < 1 || (cs.charAt(start - 1) != '@' && cs.charAt(start - 1) != '.' && !cs.subSequence(Math.max(0, start - 3), start).equals("://"));
+		final String lcUrl = url.toLowerCase(Locale.US);
+		if (lcUrl.startsWith("http://") || lcUrl.startsWith("https://")) {
+			return removeTrailingBracket(url);
+		} else {
+			return "http://" + removeTrailingBracket(url);
 		}
 	};
 
-	private static final Linkify.MatchFilter XMPPURI_MATCH_FILTER = new Linkify.MatchFilter() {
-		@Override
-		public boolean acceptMatch(CharSequence s, int start, int end) {
-			XmppUri uri = new XmppUri(s.subSequence(start, end).toString());
-			return uri.isJidValid();
+	private static String removeTrailingBracket(final String url) {
+		int numOpenBrackets = 0;
+		for (char c : url.toCharArray()) {
+			if (c == '(') {
+				++numOpenBrackets;
+			} else if (c == ')') {
+				--numOpenBrackets;
+			}
 		}
+		if (numOpenBrackets != 0 && url.charAt(url.length() - 1) == ')') {
+			return url.substring(0, url.length() - 1);
+		} else {
+			return url;
+		}
+	}
+
+	private static final Linkify.MatchFilter WEBURL_MATCH_FILTER = (cs, start, end) -> start < 1 || (cs.charAt(start - 1) != '@' && cs.charAt(start - 1) != '.' && !cs.subSequence(Math.max(0, start - 3), start).equals("://"));
+
+	private static final Linkify.MatchFilter XMPPURI_MATCH_FILTER = (s, start, end) -> {
+		XmppUri uri = new XmppUri(s.subSequence(start, end).toString());
+		return uri.isJidValid();
 	};
 
 	private final XmppActivity activity;
@@ -177,6 +187,10 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 
 	public void setOnContactPictureClicked(OnContactPictureClicked listener) {
 		this.mOnContactPictureClickedListener = listener;
+	}
+
+	public Activity getActivity() {
+		return activity;
 	}
 
 	public void setOnContactPictureLongClicked(
@@ -364,24 +378,16 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 		viewHolder.messageBody.setTextIsSelectable(false);
 	}
 
-	private void displayDecryptionFailed(ViewHolder viewHolder, boolean darkBackground) {
+	private void displayEmojiMessage(final ViewHolder viewHolder, final String body, final boolean darkBackground) {
 		viewHolder.download_button.setVisibility(View.GONE);
-		viewHolder.image.setVisibility(View.GONE);
 		viewHolder.audioPlayer.setVisibility(View.GONE);
+		viewHolder.image.setVisibility(View.GONE);
 		viewHolder.messageBody.setVisibility(View.VISIBLE);
 		if (darkBackground) {
-			viewHolder.messageBody.setTextAppearance(getContext(), R.style.TextAppearance_Conversations_Body1_Secondary_OnDark);
+			viewHolder.messageBody.setTextAppearance(getContext(), R.style.TextAppearance_Conversations_Body1_Emoji_OnDark);
 		} else {
-			viewHolder.messageBody.setTextAppearance(getContext(), R.style.TextAppearance_Conversations_Body1_Secondary);
+			viewHolder.messageBody.setTextAppearance(getContext(), R.style.TextAppearance_Conversations_Body1_Emoji);
 		}
-		viewHolder.messageBody.setTextIsSelectable(false);
-	}
-
-	private void displayEmojiMessage(final ViewHolder viewHolder, final String body) {
-		viewHolder.download_button.setVisibility(View.GONE);
-		viewHolder.audioPlayer.setVisibility(View.GONE);
-		viewHolder.image.setVisibility(View.GONE);
-		viewHolder.messageBody.setVisibility(View.VISIBLE);
 		Spannable span = new SpannableString(body);
 		float size = Emoticons.isEmoji(body) ? 3.0f : 2.0f;
 		span.setSpan(new RelativeSizeSpan(size), 0, body.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -502,7 +508,7 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 				} else {
 					final String to;
 					if (message.getCounterpart() != null) {
-						to = message.getCounterpart().getResourcepart();
+						to = message.getCounterpart().getResource();
 					} else {
 						to = "";
 					}
@@ -525,10 +531,13 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 				}
 			}
 			if (message.getConversation().getMode() == Conversation.MODE_MULTI && message.getStatus() == Message.STATUS_RECEIVED) {
-				Pattern pattern = NotificationService.generateNickHighlightPattern(message.getConversation().getMucOptions().getActualNick());
-				Matcher matcher = pattern.matcher(body);
-				while (matcher.find()) {
-					body.setSpan(new StyleSpan(Typeface.BOLD), matcher.start(), matcher.end(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+				if (message.getConversation() instanceof Conversation) {
+					final Conversation conversation = (Conversation) message.getConversation();
+					Pattern pattern = NotificationService.generateNickHighlightPattern(conversation.getMucOptions().getActualNick());
+					Matcher matcher = pattern.matcher(body);
+					while (matcher.find()) {
+						body.setSpan(new StyleSpan(Typeface.BOLD), matcher.start(), matcher.end(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+					}
 				}
 			}
 			Matcher matcher = Emoticons.generatePattern(body).matcher(body);
@@ -644,7 +653,7 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 		final Message message = getItem(position);
 		final boolean omemoEncryption = message.getEncryption() == Message.ENCRYPTION_AXOLOTL;
 		final boolean isInValidSession = message.isValidInSession() && (!omemoEncryption || message.isTrusted());
-		final Conversation conversation = message.getConversation();
+		final Conversational conversation = message.getConversation();
 		final Account account = conversation.getAccount();
 		final int type = getItemViewType(position);
 		ViewHolder viewHolder;
@@ -722,7 +731,7 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 				viewHolder.status_message.setVisibility(View.GONE);
 				viewHolder.contact_picture.setVisibility(View.GONE);
 				viewHolder.load_more_messages.setVisibility(View.VISIBLE);
-				viewHolder.load_more_messages.setOnClickListener(v -> loadMoreMessages(message.getConversation()));
+				viewHolder.load_more_messages.setOnClickListener(v -> loadMoreMessages((Conversation) message.getConversation()));
 			} else {
 				viewHolder.status_message.setVisibility(View.VISIBLE);
 				viewHolder.load_more_messages.setVisibility(View.GONE);
@@ -748,6 +757,8 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 		} else {
 			loadAvatar(message, viewHolder.contact_picture, activity.getPixel(48));
 		}
+
+		resetClickListener(viewHolder.message_box, viewHolder.messageBody);
 
 		viewHolder.contact_picture.setOnClickListener(v -> {
 			if (MessageAdapter.this.mOnContactPictureClickedListener != null) {
@@ -787,28 +798,25 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 			}
 		} else if (message.getEncryption() == Message.ENCRYPTION_PGP) {
 			if (account.isPgpDecryptionServiceConnected()) {
-				if (!account.hasPendingPgpIntent(conversation)) {
+				if (conversation instanceof Conversation && !account.hasPendingPgpIntent((Conversation) conversation)) {
 					displayInfoMessage(viewHolder, activity.getString(R.string.message_decrypting), darkBackground);
 				} else {
 					displayInfoMessage(viewHolder, activity.getString(R.string.pgp_message), darkBackground);
 				}
 			} else {
 				displayInfoMessage(viewHolder, activity.getString(R.string.install_openkeychain), darkBackground);
-				viewHolder.message_box.setOnClickListener(new OnClickListener() {
-
-					@Override
-					public void onClick(View v) {
-						activity.showInstallPgpDialog();
-					}
-				});
+				viewHolder.message_box.setOnClickListener(this::promptOpenKeychainInstall);
+				viewHolder.messageBody.setOnClickListener(this::promptOpenKeychainInstall);
 			}
 		} else if (message.getEncryption() == Message.ENCRYPTION_DECRYPTION_FAILED) {
-			displayDecryptionFailed(viewHolder, darkBackground);
+			displayInfoMessage(viewHolder, activity.getString(R.string.decryption_failed), darkBackground);
+		} else if (message.getEncryption() == Message.ENCRYPTION_AXOLOTL_NOT_FOR_THIS_DEVICE) {
+			displayInfoMessage(viewHolder, activity.getString(R.string.not_encrypted_for_this_device), darkBackground);
 		} else {
 			if (message.isGeoUri()) {
 				displayLocationMessage(viewHolder, message);
 			} else if (message.bodyIsOnlyEmojis() && message.getType() != Message.TYPE_PRIVATE) {
-				displayEmojiMessage(viewHolder, message.getBody().trim());
+				displayEmojiMessage(viewHolder, message.getBody().trim(), darkBackground);
 			} else if (message.treatAsDownloadable()) {
 				try {
 					URL url = new URL(message.getBody());
@@ -852,6 +860,16 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 		displayStatus(viewHolder, message, type, darkBackground);
 
 		return view;
+	}
+
+	private void promptOpenKeychainInstall(View view) {
+		activity.showInstallPgpDialog();
+	}
+
+	private static void resetClickListener(View... views) {
+		for (View view : views) {
+			view.setOnClickListener(null);
+		}
 	}
 
 	@Override
@@ -900,7 +918,16 @@ public class MessageAdapter extends ArrayAdapter<Message> implements CopyTextVie
 		audioPlayer.stop();
 	}
 
+	public void startStopPending() {
+		audioPlayer.startStopPending();
+	}
+
 	public void openDownloadable(Message message) {
+		if (ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+			ConversationFragment.registerPendingMessage(activity, message);
+			ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, ConversationsActivity.REQUEST_OPEN_MESSAGE);
+			return;
+		}
 		DownloadableFile file = activity.xmppConnectionService.getFileBackend().getFile(message);
 		if (!file.exists()) {
 			Toast.makeText(activity, R.string.file_deleted, Toast.LENGTH_SHORT).show();

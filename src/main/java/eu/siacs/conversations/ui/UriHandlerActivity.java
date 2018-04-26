@@ -13,10 +13,11 @@ import android.widget.Toast;
 
 import java.util.List;
 
+import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.persistance.DatabaseBackend;
 import eu.siacs.conversations.utils.XmppUri;
-import eu.siacs.conversations.xmpp.jid.Jid;
+import rocks.xmpp.addr.Jid;
 
 public class UriHandlerActivity extends AppCompatActivity {
 
@@ -53,7 +54,9 @@ public class UriHandlerActivity extends AppCompatActivity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		this.handled = savedInstanceState != null && savedInstanceState.getBoolean("handled",false);
+		this.handled = savedInstanceState != null && savedInstanceState.getBoolean("handled", false);
+		getLayoutInflater().inflate(R.layout.toolbar, findViewById(android.R.id.content));
+		setSupportActionBar(findViewById(R.id.toolbar));
 	}
 
 	@Override
@@ -74,11 +77,20 @@ public class UriHandlerActivity extends AppCompatActivity {
 	}
 
 	private void handleUri(Uri uri) {
+		handleUri(uri, false);
+	}
+
+	private void handleUri(Uri uri, final boolean scanned) {
 		final Intent intent;
 		final XmppUri xmppUri = new XmppUri(uri);
 		final List<Jid> accounts = DatabaseBackend.getInstance(this).getAccountJids(); //TODO only look at enabled accounts
 
-		if (accounts.size() == 0) {
+		if (!xmppUri.isJidValid()) {
+			Toast.makeText(this, R.string.invalid_jid, Toast.LENGTH_SHORT).show();
+			return;
+		}
+
+		if (accounts.size() == 0 && Config.MAGIC_CREATE_DOMAIN != null) {
 			intent = new Intent(getApplicationContext(), WelcomeActivity.class);
 			WelcomeActivity.addInviteUri(intent, xmppUri);
 			startActivity(intent);
@@ -102,16 +114,15 @@ public class UriHandlerActivity extends AppCompatActivity {
 		} else if (accounts.contains(xmppUri.getJid())) {
 			intent = new Intent(getApplicationContext(), EditAccountActivity.class);
 			intent.setAction(Intent.ACTION_VIEW);
-			intent.putExtra("jid", xmppUri.getJid().toBareJid().toString());
+			intent.putExtra("jid", xmppUri.getJid().asBareJid().toString());
 			intent.setData(uri);
-		} else if (xmppUri.isJidValid()){
+			intent.putExtra("scanned", scanned);
+		} else {
 			intent = new Intent(getApplicationContext(), StartConversationActivity.class);
 			intent.setAction(Intent.ACTION_VIEW);
 			intent.setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+			intent.putExtra("scanned", scanned);
 			intent.setData(uri);
-		} else {
-			Toast.makeText(this,R.string.invalid_jid,Toast.LENGTH_SHORT).show();
-			return;
 		}
 
 		startActivity(intent);
@@ -149,7 +160,7 @@ public class UriHandlerActivity extends AppCompatActivity {
 			String result = intent.getStringExtra(ScanActivity.INTENT_EXTRA_RESULT);
 			if (result != null) {
 				Uri uri = Uri.parse(result);
-				handleUri(uri);
+				handleUri(uri, true);
 			}
 		}
 		finish();

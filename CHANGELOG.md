@@ -1,5 +1,32 @@
 # Changelog
 
+### Version 2.1.2
+* Fixed avatars not being displayed on new installs
+
+### Version 2.1.1
+* Improved start up performance
+* bug fixes
+
+### Version 2.1.0
+* Added configurable font size
+* Added global OMEMO preference
+* Added scroll to bottom button
+* Only mark visible messages as read
+
+
+### Version 2.0.0
+* OMEMO by default for everything but public group chats
+* Integrate QR code scanner (requires camera permission)
+* Removed support for OTR
+* Removed support for customizable resources
+* Removed slide out panel for conversation overview
+* Add ability to change status message
+* Highlight irregular unicode code blocks in Jabber IDs
+* Conversations now requires Android 4.4+
+
+### Version 1.23.8
+* bug fixes
+
 ### Version 1.23.7
 * Improved MAM support + bug fixes
 

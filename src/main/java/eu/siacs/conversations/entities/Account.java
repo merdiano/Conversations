@@ -3,8 +3,10 @@ package eu.siacs.conversations.entities;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.os.SystemClock;
+import android.util.Log;
 import android.util.Pair;
 
+import eu.siacs.conversations.Config;
 import eu.siacs.conversations.crypto.PgpDecryptionService;
 
 import org.json.JSONException;
@@ -23,8 +25,7 @@ import eu.siacs.conversations.crypto.axolotl.XmppAxolotlSession;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.utils.XmppUri;
 import eu.siacs.conversations.xmpp.XmppConnection;
-import eu.siacs.conversations.xmpp.jid.InvalidJidException;
-import eu.siacs.conversations.xmpp.jid.Jid;
+import rocks.xmpp.addr.Jid;
 
 public class Account extends AbstractEntity {
 
@@ -53,6 +54,7 @@ public class Account extends AbstractEntity {
 	public static final int OPTION_MAGIC_CREATE = 4;
 	public static final int OPTION_REQUIRES_ACCESS_MODE_CHANGE = 5;
 	public static final int OPTION_LOGGED_IN_SUCCESSFULLY = 6;
+	public static final int OPTION_HTTP_UPLOAD_AVAILABLE = 7;
 	public final HashSet<Pair<String, String>> inProgressDiscoFetches = new HashSet<>();
 
 	public boolean httpUploadAvailable(long filesize) {
@@ -60,7 +62,7 @@ public class Account extends AbstractEntity {
 	}
 
 	public boolean httpUploadAvailable() {
-		return httpUploadAvailable(0);
+		return isOptionSet(OPTION_HTTP_UPLOAD_AVAILABLE) || httpUploadAvailable(0);
 	}
 
 	public void setDisplayName(String displayName) {
@@ -227,7 +229,7 @@ public class Account extends AbstractEntity {
 	protected Jid jid;
 	protected String password;
 	protected int options = 0;
-	protected String rosterVersion;
+	private String rosterVersion;
 	protected State status = State.OFFLINE;
 	protected final JSONObject keys;
 	protected String resource;
@@ -276,13 +278,16 @@ public class Account extends AbstractEntity {
 	}
 
 	public static Account fromCursor(final Cursor cursor) {
-		Jid jid = null;
+		final Jid jid;
 		try {
-			jid = Jid.fromParts(
+			String resource = cursor.getString(cursor.getColumnIndex(RESOURCE));
+			jid = Jid.of(
 					cursor.getString(cursor.getColumnIndex(USERNAME)),
 					cursor.getString(cursor.getColumnIndex(SERVER)),
-					cursor.getString(cursor.getColumnIndex(RESOURCE)));
-		} catch (final InvalidJidException ignored) {
+					resource == null || resource.trim().isEmpty() ? null : resource);
+		} catch (final IllegalArgumentException ignored) {
+			Log.d(Config.LOGTAG,cursor.getString(cursor.getColumnIndex(USERNAME))+"@"+cursor.getString(cursor.getColumnIndex(SERVER)));
+			throw new AssertionError(ignored);
 		}
 		return new Account(cursor.getString(cursor.getColumnIndex(UUID)),
 				jid,
@@ -313,13 +318,13 @@ public class Account extends AbstractEntity {
 	}
 
 	public String getUsername() {
-		return jid.getLocalpart();
+		return jid.getEscapedLocal();
 	}
 
 	public boolean setJid(final Jid next) {
 		final Jid previousFull = this.jid;
-		final Jid prev = this.jid != null ? this.jid.toBareJid() : null;
-		final boolean changed = prev == null || (next != null && !prev.equals(next.toBareJid()));
+		final Jid prev = this.jid != null ? this.jid.asBareJid() : null;
+		final boolean changed = prev == null || (next != null && !prev.equals(next.asBareJid()));
 		if (changed) {
 			final AxolotlService oldAxolotlService = this.axolotlService;
 			if (oldAxolotlService != null) {
@@ -329,11 +334,11 @@ public class Account extends AbstractEntity {
 			}
 		}
 		this.jid = next;
-		return next != null && next.equals(previousFull);
+		return next != null && !next.equals(previousFull);
 	}
 
-	public Jid getServer() {
-		return jid.toDomainJid();
+	public String getServer() {
+		return jid.getDomain();
 	}
 
 	public String getPassword() {
@@ -353,8 +358,8 @@ public class Account extends AbstractEntity {
 	}
 
 	public boolean isOnion() {
-		final Jid server = getServer();
-		return server != null && server.toString().toLowerCase().endsWith(".onion");
+		final String server = getServer();
+		return server != null && server.endsWith(".onion");
 	}
 
 	public void setPort(int port) {
@@ -408,20 +413,11 @@ public class Account extends AbstractEntity {
 	}
 
 	public String getResource() {
-		return jid.getResourcepart();
+		return jid.getResource();
 	}
 
-	public boolean setResource(final String resource) {
-		final String oldResource = jid.getResourcepart();
-		if (oldResource == null || !oldResource.equals(resource)) {
-			try {
-				jid = Jid.fromParts(jid.getLocalpart(), jid.getDomainpart(), resource);
-				return true;
-			} catch (final InvalidJidException ignored) {
-				return true;
-			}
-		}
-		return false;
+	public void setResource(final String resource) {
+		this.jid = this.jid.withResource(resource);
 	}
 
 	public Jid getJid() {
@@ -470,8 +466,8 @@ public class Account extends AbstractEntity {
 	public ContentValues getContentValues() {
 		final ContentValues values = new ContentValues();
 		values.put(UUID, uuid);
-		values.put(USERNAME, jid.getLocalpart());
-		values.put(SERVER, jid.getDomainpart());
+		values.put(USERNAME, jid.getLocal());
+		values.put(SERVER, jid.getDomain());
 		values.put(PASSWORD, password);
 		values.put(OPTIONS, options);
 		synchronized (this.keys) {
@@ -484,7 +480,7 @@ public class Account extends AbstractEntity {
 		values.put(PORT, port);
 		values.put(STATUS, presenceStatus.toShowString());
 		values.put(STATUS_MESSAGE, presenceStatusMessage);
-		values.put(RESOURCE,jid.getResourcepart());
+		values.put(RESOURCE,jid.getResource());
 		return values;
 	}
 
@@ -589,7 +585,7 @@ public class Account extends AbstractEntity {
 
 	public Bookmark getBookmark(final Jid jid) {
 		for(final Bookmark bookmark : this.bookmarks) {
-			if (bookmark.getJid() != null && jid.toBareJid().equals(bookmark.getJid().toBareJid())) {
+			if (bookmark.getJid() != null && jid.asBareJid().equals(bookmark.getJid().asBareJid())) {
 				return bookmark;
 			}
 		}
@@ -623,7 +619,7 @@ public class Account extends AbstractEntity {
 
 	public String getShareableUri() {
 		List<XmppUri.Fingerprint> fingerprints = this.getFingerprints();
-		String uri = "xmpp:"+this.getJid().toBareJid().toString();
+		String uri = "xmpp:"+this.getJid().asBareJid().toEscapedString();
 		if (fingerprints.size() > 0) {
 			return XmppUri.getFingerprintUri(uri,fingerprints,';');
 		} else {
@@ -633,7 +629,7 @@ public class Account extends AbstractEntity {
 
 	public String getShareableLink() {
 		List<XmppUri.Fingerprint> fingerprints = this.getFingerprints();
-		String uri = "https://conversations.im/i/"+this.getJid().toBareJid().toString();
+		String uri = "https://conversations.im/i/"+this.getJid().asBareJid().toEscapedString();
 		if (fingerprints.size() > 0) {
 			return XmppUri.getFingerprintUri(uri,fingerprints,'&');
 		} else {
@@ -657,11 +653,11 @@ public class Account extends AbstractEntity {
 
 	public boolean isBlocked(final ListItem contact) {
 		final Jid jid = contact.getJid();
-		return jid != null && (blocklist.contains(jid.toBareJid()) || blocklist.contains(jid.toDomainJid()));
+		return jid != null && (blocklist.contains(jid.asBareJid()) || blocklist.contains(Jid.ofDomain(jid.getDomain())));
 	}
 
 	public boolean isBlocked(final Jid jid) {
-		return jid != null && blocklist.contains(jid.toBareJid());
+		return jid != null && blocklist.contains(jid.asBareJid());
 	}
 
 	public Collection<Jid> getBlocklist() {

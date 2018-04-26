@@ -1,6 +1,5 @@
 package eu.siacs.conversations.ui.adapter;
 
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.databinding.DataBindingUtil;
@@ -28,7 +27,9 @@ import eu.siacs.conversations.entities.ListItem;
 import eu.siacs.conversations.ui.SettingsActivity;
 import eu.siacs.conversations.ui.XmppActivity;
 import eu.siacs.conversations.utils.EmojiWrapper;
+import eu.siacs.conversations.utils.IrregularUnicodeDetector;
 import eu.siacs.conversations.utils.UIHelper;
+import rocks.xmpp.addr.Jid;
 
 public class ListItemAdapter extends ArrayAdapter<ListItem> {
 
@@ -108,10 +109,10 @@ public class ListItemAdapter extends ArrayAdapter<ListItem> {
 				viewHolder.tags.addView(tv);
 			}
 		}
-		final String jid = item.getDisplayJid();
+		final Jid jid = item.getJid();
 		if (jid != null) {
 			viewHolder.jid.setVisibility(View.VISIBLE);
-			viewHolder.jid.setText(jid);
+			viewHolder.jid.setText(IrregularUnicodeDetector.style(activity, jid));
 		} else {
 			viewHolder.jid.setVisibility(View.GONE);
 		}
@@ -132,7 +133,7 @@ public class ListItemAdapter extends ArrayAdapter<ListItem> {
 				imageView.setImageBitmap(bm);
 				imageView.setBackgroundColor(0x00000000);
 			} else {
-				String seed = item.getJid() != null ? item.getJid().toBareJid().toString() : item.getDisplayName();
+				String seed = item.getJid() != null ? item.getJid().asBareJid().toString() : item.getDisplayName();
 				imageView.setBackgroundColor(UIHelper.getColorForName(seed));
 				imageView.setImageDrawable(null);
 				final BitmapWorkerTask task = new BitmapWorkerTask(imageView);

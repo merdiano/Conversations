@@ -1,10 +1,9 @@
 package eu.siacs.conversations.ui;
 
-import android.databinding.DataBindingUtil;
-import android.support.v7.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.databinding.DataBindingUtil;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
@@ -12,6 +11,8 @@ import android.provider.ContactsContract.CommonDataKinds;
 import android.provider.ContactsContract.Contacts;
 import android.provider.ContactsContract.Intents;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.Toolbar;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -21,7 +22,6 @@ import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.TextView;
 import android.widget.Toast;
-
 
 import org.openintents.openpgp.util.OpenPgpUtils;
 
@@ -38,18 +38,19 @@ import eu.siacs.conversations.entities.Contact;
 import eu.siacs.conversations.entities.ListItem;
 import eu.siacs.conversations.services.XmppConnectionService.OnAccountUpdate;
 import eu.siacs.conversations.services.XmppConnectionService.OnRosterUpdate;
+import eu.siacs.conversations.ui.util.MenuDoubleTabUtil;
+import eu.siacs.conversations.utils.IrregularUnicodeDetector;
 import eu.siacs.conversations.utils.UIHelper;
 import eu.siacs.conversations.utils.XmppUri;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.OnKeyStatusUpdated;
 import eu.siacs.conversations.xmpp.OnUpdateBlocklist;
 import eu.siacs.conversations.xmpp.XmppConnection;
-import eu.siacs.conversations.xmpp.jid.InvalidJidException;
-import eu.siacs.conversations.xmpp.jid.Jid;
+import rocks.xmpp.addr.Jid;
 
 public class ContactDetailsActivity extends OmemoActivity implements OnAccountUpdate, OnRosterUpdate, OnUpdateBlocklist, OnKeyStatusUpdated {
 	public static final String ACTION_VIEW_CONTACT = "view_contact";
-
+	ActivityContactDetailsBinding binding;
 	private Contact contact;
 	private DialogInterface.OnClickListener removeFromRoster = new DialogInterface.OnClickListener() {
 
@@ -97,9 +98,6 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 			}
 		}
 	};
-
-	ActivityContactDetailsBinding binding;
-
 	private Jid accountJid;
 	private Jid contactJid;
 	private boolean showDynamicTags = false;
@@ -130,8 +128,7 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 				AlertDialog.Builder builder = new AlertDialog.Builder(
 						ContactDetailsActivity.this);
 				builder.setTitle(getString(R.string.action_add_phone_book));
-				builder.setMessage(getString(R.string.add_phone_book_text,
-						contact.getDisplayJid()));
+				builder.setMessage(getString(R.string.add_phone_book_text, contact.getJid().toString()));
 				builder.setNegativeButton(getString(R.string.cancel), null);
 				builder.setPositiveButton(getString(R.string.add), addToPhonebook);
 				builder.create().show();
@@ -168,7 +165,7 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 	protected String getShareableUri(boolean http) {
 		final String prefix = http ? "https://conversations.im/i/" : "xmpp:";
 		if (contact != null) {
-			return prefix+contact.getJid().toBareJid().toString();
+			return prefix+contact.getJid().asBareJid().toEscapedString();
 		} else {
 			return "";
 		}
@@ -180,25 +177,24 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 		showInactiveOmemo = savedInstanceState != null && savedInstanceState.getBoolean("show_inactive_omemo",false);
 		if (getIntent().getAction().equals(ACTION_VIEW_CONTACT)) {
 			try {
-				this.accountJid = Jid.fromString(getIntent().getExtras().getString(EXTRA_ACCOUNT));
-			} catch (final InvalidJidException ignored) {
+				this.accountJid = Jid.of(getIntent().getExtras().getString(EXTRA_ACCOUNT));
+			} catch (final IllegalArgumentException ignored) {
 			}
 			try {
-				this.contactJid = Jid.fromString(getIntent().getExtras().getString("contact"));
-			} catch (final InvalidJidException ignored) {
+				this.contactJid = Jid.of(getIntent().getExtras().getString("contact"));
+			} catch (final IllegalArgumentException ignored) {
 			}
 		}
 		this.messageFingerprint = getIntent().getStringExtra("fingerprint");
 		this.binding = DataBindingUtil.setContentView(this, R.layout.activity_contact_details);
 
-		if (getSupportActionBar() != null) {
-			getSupportActionBar().setHomeButtonEnabled(true);
-			getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-		}
+		setSupportActionBar((Toolbar) binding.toolbar);
+		configureActionBar(getSupportActionBar());
 		binding.showInactiveDevices.setOnClickListener(v -> {
 			showInactiveOmemo = !showInactiveOmemo;
 			populateView();
 		});
+		binding.addContactButton.setOnClickListener(v -> showAddToRosterDialog(contact));
 	}
 
 	@Override
@@ -222,6 +218,9 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 
 	@Override
 	public boolean onOptionsItemSelected(final MenuItem menuItem) {
+		if (MenuDoubleTabUtil.shouldIgnoreTap()) {
+			return false;
+		}
 		final AlertDialog.Builder builder = new AlertDialog.Builder(this);
 		builder.setNegativeButton(getString(R.string.cancel), null);
 		switch (menuItem.getItemId()) {
@@ -236,9 +235,7 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 				break;
 			case R.id.action_delete_contact:
 				builder.setTitle(getString(R.string.action_delete_contact))
-					.setMessage(
-							getString(R.string.remove_contact_text,
-								contact.getDisplayJid()))
+					.setMessage(getString(R.string.remove_contact_text, contact.getJid().toString()))
 					.setPositiveButton(getString(R.string.delete),
 							removeFromRoster).create().show();
 				break;
@@ -387,17 +384,12 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 			}
 		}
 
-		if (contact.getPresences().size() > 1) {
-			binding.detailsContactjid.setText(contact.getDisplayJid() + " ("
-					+ contact.getPresences().size() + ")");
-		} else {
-			binding.detailsContactjid.setText(contact.getDisplayJid());
-		}
+		binding.detailsContactjid.setText(IrregularUnicodeDetector.style(this,contact.getJid()));
 		String account;
 		if (Config.DOMAIN_LOCK != null) {
-			account = contact.getAccount().getJid().getLocalpart();
+			account = contact.getAccount().getJid().getLocal();
 		} else {
-			account = contact.getAccount().getJid().toBareJid().toString();
+			account = contact.getAccount().getJid().asBareJid().toString();
 		}
 		binding.detailsAccount.setText(getString(R.string.using_account, account));
 		binding.detailsContactBadge.setImageBitmap(avatarService().get(contact, getPixel(72)));
@@ -435,7 +427,7 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 		} else {
 			binding.showInactiveDevices.setVisibility(View.GONE);
 		}
-		binding.scanButton.setVisibility(hasKeys ? View.VISIBLE : View.GONE);
+		binding.scanButton.setVisibility(hasKeys && isCameraFeatureAvailable() ? View.VISIBLE : View.GONE);
 		if (hasKeys) {
 			binding.scanButton.setOnClickListener((v)-> ScanActivity.scan(this));
 		}
@@ -494,7 +486,7 @@ public class ContactDetailsActivity extends OmemoActivity implements OnAccountUp
 
 	@Override
 	protected void processFingerprintVerification(XmppUri uri) {
-		if (contact != null && contact.getJid().toBareJid().equals(uri.getJid()) && uri.hasFingerprints()) {
+		if (contact != null && contact.getJid().asBareJid().equals(uri.getJid()) && uri.hasFingerprints()) {
 			if (xmppConnectionService.verifyFingerprints(contact,uri.getFingerprints())) {
 				Toast.makeText(this,R.string.verified_fingerprints,Toast.LENGTH_SHORT).show();
 			}

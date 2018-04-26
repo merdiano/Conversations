@@ -6,22 +6,20 @@ buildscript {
         jcenter()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.0.1'
+        classpath 'com.android.tools.build:gradle:3.1.1'
     }
 }
 
 apply plugin: 'com.android.application'
 
 repositories {
-    jcenter{
-        url "http://jcenter.bintray.com"
-    }
+    jcenter()
     mavenCentral()
     maven {
         url 'https://maven.google.com'
     }
     maven {
-        url "https://jitpack.io"
+        url "https://oss.sonatype.org/content/repositories/snapshots"
     }
 }
 
@@ -31,12 +29,11 @@ configurations {
 }
 
 ext {
-    supportLibVersion = '27.1.0'
+    supportLibVersion = '27.1.1'
 }
 
 dependencies {
-    implementation project(':libs:EnhancedListView')
-    playstoreImplementation 'com.google.android.gms:play-services-gcm:11.8.0'
+    playstoreImplementation 'com.google.android.gms:play-services-gcm:15.0.0'
     implementation 'org.sufficientlysecure:openpgp-api:10.0'
     implementation 'com.soundcloud.android:android-crop:1.0.1@aar'
     implementation "com.android.support:support-v13:$supportLibVersion"
@@ -47,7 +44,6 @@ dependencies {
     implementation "com.android.support:design:$supportLibVersion"
     freeImplementation "com.android.support:support-emoji-bundled:$supportLibVersion"
     implementation 'org.bouncycastle:bcmail-jdk15on:1.58'
-    implementation 'org.gnu.inet:libidn:1.15'
     implementation 'com.google.zxing:core:3.3.0'
     implementation 'de.measite.minidns:minidns-hla:0.2.4'
     implementation 'me.leolin:ShortcutBadger:1.1.21@aar'
@@ -55,6 +51,8 @@ dependencies {
     implementation 'com.makeramen:roundedimageview:2.3.0'
     implementation "com.wefika:flowlayout:0.4.1"
     implementation 'net.ypresto.androidtranscoder:android-transcoder:0.2.0'
+    implementation 'rocks.xmpp:xmpp-addr:0.8.0-SNAPSHOT'
+    implementation 'org.osmdroid:osmdroid-android:6.0.1'
 }
 
 ext {
@@ -64,17 +62,16 @@ ext {
 
 android {
     compileSdkVersion 27
-    buildToolsVersion "27.0.3"
 
     defaultConfig {
-        minSdkVersion 14
+        minSdkVersion 19
         targetSdkVersion 25
-        versionCode 254
-        versionName "1.23.7"
+        versionCode 266
+        versionName "2.1.2"
         archivesBaseName += "-$versionName"
         applicationId "eu.siacs.conversations"
         resValue "string", "applicationId", applicationId
-        resValue "string", "app_name", "Kepderi"
+        resValue "string", "app_name", "Conversations"
     }
 
     dataBinding {

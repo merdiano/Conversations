@@ -8,7 +8,7 @@
     <bool name="dnd_on_silent_mode">false</bool>
     <bool name="treat_vibrate_as_silent">false</bool>
     <bool name="confirm_messages">true</bool>
-    <bool name="chat_states">false</bool>
+    <bool name="chat_states">true</bool>
     <bool name="last_activity">false</bool>
     <bool name="show_notification">true</bool>
     <bool name="vibrate_on_notification">true</bool>
@@ -21,7 +21,6 @@
     <string name="theme">light</string>
     <bool name="use_subject">true</bool>
     <bool name="use_green_background">true</bool>
-    <bool name="use_larger_font">false</bool>
     <bool name="send_button_status">false</bool>
     <string name="quick_action">recent</string>
     <bool name="show_dynamic_tags">false</bool>
@@ -42,4 +41,6 @@
     <bool name="validate_hostname">false</bool>
     <bool name="show_qr_code_scan">true</bool>
     <bool name="scroll_to_bottom">true</bool>
+    <string name="omemo_setting_default">default_on</string>
+    <string name="default_font_size">small</string>
 </resources>

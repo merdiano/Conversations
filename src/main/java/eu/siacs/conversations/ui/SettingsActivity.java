@@ -19,6 +19,8 @@ import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
 import android.provider.MediaStore;
 import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Toast;
 
 import java.io.File;
@@ -27,18 +29,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
+import eu.siacs.conversations.crypto.OmemoSetting;
 import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.services.ExportLogsService;
 import eu.siacs.conversations.services.MemorizingTrustManager;
 import eu.siacs.conversations.ui.util.Color;
 import eu.siacs.conversations.utils.TimeframeUtils;
-import eu.siacs.conversations.xmpp.XmppConnection;
-import eu.siacs.conversations.xmpp.jid.InvalidJidException;
-import eu.siacs.conversations.xmpp.jid.Jid;
+import rocks.xmpp.addr.Jid;
 
 public class SettingsActivity extends XmppActivity implements
 		OnSharedPreferenceChangeListener {
@@ -53,6 +53,7 @@ public class SettingsActivity extends XmppActivity implements
 	public static final String BROADCAST_LAST_ACTIVITY = "last_activity";
 	public static final String THEME = "theme";
 	public static final String SHOW_DYNAMIC_TAGS = "show_dynamic_tags";
+	public static final String OMEMO_SETTING = "omemo";
 
 	public static final int REQUEST_WRITE_LOGS = 0xbf8701;
 	private SettingsFragment mSettingsFragment;
@@ -60,18 +61,19 @@ public class SettingsActivity extends XmppActivity implements
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_settings);
 		FragmentManager fm = getFragmentManager();
-		mSettingsFragment = (SettingsFragment) fm.findFragmentById(android.R.id.content);
+		mSettingsFragment = (SettingsFragment) fm.findFragmentById(R.id.settings_content);
 		if (mSettingsFragment == null || !mSettingsFragment.getClass().equals(SettingsFragment.class)) {
 			mSettingsFragment = new SettingsFragment();
-			fm.beginTransaction().replace(android.R.id.content, mSettingsFragment).commit();
+			fm.beginTransaction().replace(R.id.settings_content, mSettingsFragment).commit();
 		}
 		mSettingsFragment.setActivityIntent(getIntent());
-
 		this.mTheme = findTheme();
 		setTheme(this.mTheme);
 		getWindow().getDecorView().setBackgroundColor(Color.get(this, R.attr.color_background_primary));
-
+		setSupportActionBar(findViewById(R.id.toolbar));
+		configureActionBar(getSupportActionBar());
 	}
 
 	@Override
@@ -83,6 +85,8 @@ public class SettingsActivity extends XmppActivity implements
 	public void onStart() {
 		super.onStart();
 		PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener(this);
+
+		changeOmemoSettingSummary();
 
 		if (Config.FORCE_ORBOT) {
 			PreferenceCategory connectionOptions = (PreferenceCategory) mSettingsFragment.findPreference("connection_options");
@@ -116,7 +120,6 @@ public class SettingsActivity extends XmppActivity implements
 			CharSequence[] entries = new CharSequence[choices.length];
 			CharSequence[] entryValues = new CharSequence[choices.length];
 			for (int i = 0; i < choices.length; ++i) {
-				Log.d(Config.LOGTAG,"resolving choice "+choices[i]);
 				entryValues[i] = String.valueOf(choices[i]);
 				if (choices[i] == 0) {
 					entries[i] = getString(R.string.never);
@@ -159,7 +162,7 @@ public class SettingsActivity extends XmppActivity implements
 					displayToast(getString(R.string.toast_no_trusted_certs));
 					return true;
 				}
-				final ArrayList selectedItems = new ArrayList<>();
+				final ArrayList<Integer> selectedItems = new ArrayList<>();
 				final AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(SettingsActivity.this);
 				dialogBuilder.setTitle(getResources().getString(R.string.dialog_manage_certs_title));
 				dialogBuilder.setMultiChoiceItems(aliases.toArray(new CharSequence[aliases.size()]), null,
@@ -232,6 +235,26 @@ public class SettingsActivity extends XmppActivity implements
 		}
 	}
 
+	private void changeOmemoSettingSummary() {
+		ListPreference omemoPreference = (ListPreference) mSettingsFragment.findPreference(OMEMO_SETTING);
+		if (omemoPreference != null) {
+			String value = omemoPreference.getValue();
+			switch (value) {
+				case "always":
+					omemoPreference.setSummary(R.string.pref_omemo_setting_summary_always);
+					break;
+				case "default_on":
+					omemoPreference.setSummary(R.string.pref_omemo_setting_summary_default_on);
+					break;
+				case "default_off":
+					omemoPreference.setSummary(R.string.pref_omemo_setting_summary_default_off);
+					break;
+			}
+		} else {
+			Log.d(Config.LOGTAG,"unable to find preference named "+OMEMO_SETTING);
+		}
+	}
+
 	private boolean isCallable(final Intent i) {
 		return i != null && getPackageManager().queryIntentActivities(i, PackageManager.MATCH_DEFAULT_ONLY).size() > 0;
 	}
@@ -296,7 +319,7 @@ public class SettingsActivity extends XmppActivity implements
 		final List<CharSequence> accounts = new ArrayList<>();
 		for (Account account : xmppConnectionService.getAccounts()) {
 			if (account.isEnabled()) {
-				accounts.add(account.getJid().toBareJid().toString());
+				accounts.add(account.getJid().asBareJid().toString());
 			}
 		}
 		final boolean[] checkedItems = new boolean[accounts.size()];
@@ -316,12 +339,12 @@ public class SettingsActivity extends XmppActivity implements
 			for (int i = 0; i < checkedItems.length; ++i) {
 				if (checkedItems[i]) {
 					try {
-						Jid jid = Jid.fromString(accounts.get(i).toString());
+						Jid jid = Jid.of(accounts.get(i).toString());
 						Account account = xmppConnectionService.findAccountByJid(jid);
 						if (account != null) {
 							account.getAxolotlService().regenerateKeys(true);
 						}
-					} catch (InvalidJidException e) {
+					} catch (IllegalArgumentException e) {
 						//
 					}
 
@@ -351,7 +374,10 @@ public class SettingsActivity extends XmppActivity implements
 				TREAT_VIBRATE_AS_SILENT,
 				MANUALLY_CHANGE_PRESENCE,
 				BROADCAST_LAST_ACTIVITY);
-		if (name.equals(KEEP_FOREGROUND_SERVICE)) {
+		if (name.equals(OMEMO_SETTING)) {
+			OmemoSetting.load(this, preferences);
+			changeOmemoSettingSummary();
+		} else if (name.equals(KEEP_FOREGROUND_SERVICE)) {
 			xmppConnectionService.toggleForegroundService();
 		} else if (resendPresence.contains(name)) {
 			if (xmppConnectionServiceBound) {

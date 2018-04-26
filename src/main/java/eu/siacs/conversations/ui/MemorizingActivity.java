@@ -40,8 +40,9 @@ import java.util.logging.Logger;
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.entities.MTMDecision;
 import eu.siacs.conversations.services.MemorizingTrustManager;
+import eu.siacs.conversations.utils.ThemeHelper;
 
-public class MemorizingActivity extends AppCompatActivity implements OnClickListener,OnCancelListener {
+public class MemorizingActivity extends AppCompatActivity implements OnClickListener, OnCancelListener {
 
 	private final static Logger LOGGER = Logger.getLogger(MemorizingActivity.class.getName());
 
@@ -52,8 +53,10 @@ public class MemorizingActivity extends AppCompatActivity implements OnClickList
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		LOGGER.log(Level.FINE, "onCreate");
-		setTheme(findTheme());
+		setTheme(ThemeHelper.find(this));
 		super.onCreate(savedInstanceState);
+		getLayoutInflater().inflate(R.layout.toolbar, findViewById(android.R.id.content));
+		setSupportActionBar(findViewById(R.id.toolbar));
 	}
 
 	@Override
@@ -85,15 +88,6 @@ public class MemorizingActivity extends AppCompatActivity implements OnClickList
 		LOGGER.log(Level.FINE, "Sending decision: " + decision);
 		MemorizingTrustManager.interactResult(decisionId, decision);
 		finish();
-	}
-
-	protected int findTheme() {
-		return getPreferences().getString(SettingsActivity.THEME, getResources().getString(R.string.theme)).equals("dark") ? R.style.ConversationsTheme_Dark : R.style.ConversationsTheme;
-	}
-
-	protected SharedPreferences getPreferences() {
-		return PreferenceManager
-				.getDefaultSharedPreferences(getApplicationContext());
 	}
 
 	// react on AlertDialog button press

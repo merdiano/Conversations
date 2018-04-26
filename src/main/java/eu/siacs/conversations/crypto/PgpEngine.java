@@ -39,16 +39,16 @@ public class PgpEngine {
 
 	private static void logError(Account account, OpenPgpError error) {
 		if (error != null) {
-			Log.d(Config.LOGTAG, account.getJid().toBareJid().toString() + ": OpenKeychain error '" + error.getMessage() + "' code=" + error.getErrorId());
+			Log.d(Config.LOGTAG, account.getJid().asBareJid().toString() + ": OpenKeychain error '" + error.getMessage() + "' code=" + error.getErrorId());
 		} else {
-			Log.d(Config.LOGTAG, account.getJid().toBareJid().toString() + ": OpenKeychain error with no message");
+			Log.d(Config.LOGTAG, account.getJid().asBareJid().toString() + ": OpenKeychain error with no message");
 		}
 	}
 
 	public void encrypt(final Message message, final UiCallback<Message> callback) {
 		Intent params = new Intent();
 		params.setAction(OpenPgpApi.ACTION_ENCRYPT);
-		final Conversation conversation = message.getConversation();
+		final Conversation conversation = (Conversation) message.getConversation();
 		if (conversation.getMode() == Conversation.MODE_SINGLE) {
 			long[] keys = {
 					conversation.getContact().getPgpKeyId(),
@@ -208,7 +208,7 @@ public class PgpEngine {
 		params.putExtra(OpenPgpApi.EXTRA_SIGN_KEY_ID, account.getPgpId());
 		InputStream is = new ByteArrayInputStream(status.getBytes());
 		final OutputStream os = new ByteArrayOutputStream();
-		Log.d(Config.LOGTAG, account.getJid().toBareJid() + ": signing status message \"" + status + "\"");
+		Log.d(Config.LOGTAG, account.getJid().asBareJid() + ": signing status message \"" + status + "\"");
 		api.executeApiAsync(params, is, os, result -> {
 			switch (result.getIntExtra(OpenPgpApi.RESULT_CODE, 0)) {
 				case OpenPgpApi.RESULT_CODE_SUCCESS:

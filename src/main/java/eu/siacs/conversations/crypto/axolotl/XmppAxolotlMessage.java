@@ -25,7 +25,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.xml.Element;
-import eu.siacs.conversations.xmpp.jid.Jid;
+import rocks.xmpp.addr.Jid;
 
 public class XmppAxolotlMessage {
 	public static final String CONTAINERTAG = "encrypted";
@@ -88,6 +88,18 @@ public class XmppAxolotlMessage {
 
 		public byte[] getIv() {
 			return iv;
+		}
+	}
+
+	public static int parseSourceId(final Element axolotlMessage) throws IllegalArgumentException {
+		final Element header = axolotlMessage.findChild(HEADER);
+		if (header == null) {
+			throw new IllegalArgumentException("No header found");
+		}
+		try {
+			return Integer.parseInt(header.getAttribute(SOURCEID));
+		} catch (NumberFormatException e) {
+			throw new IllegalArgumentException("invalid source id");
 		}
 	}
 
@@ -254,7 +266,7 @@ public class XmppAxolotlMessage {
 	private byte[] unpackKey(XmppAxolotlSession session, Integer sourceDeviceId) throws CryptoFailedException {
 		XmppAxolotlSession.AxolotlKey encryptedKey = keys.get(sourceDeviceId);
 		if (encryptedKey == null) {
-			throw new CryptoFailedException("Message was not encrypted for this device");
+			throw new NotEncryptedForThisDeviceException();
 		}
 		return session.processReceiving(encryptedKey);
 	}
